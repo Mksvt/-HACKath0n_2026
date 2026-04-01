@@ -5,6 +5,8 @@ import {
   FlightUploadResponse,
   TelemetryResponse,
   TrajectoryResponse,
+  TrajectoryWithAttitudeResponse,
+  DroneAttitude,
 } from '@/types/api';
 
 const API_BASE =
@@ -45,6 +47,14 @@ export async function fetchTrajectory(
 ): Promise<TrajectoryResponse> {
   const res = await fetch(`${API_BASE}/flights/${flightId}/trajectory`);
   return handleResponse<TrajectoryResponse>(res);
+}
+
+export async function fetchTrajectoryWithAttitude(
+  flightId: string,
+): Promise<DroneAttitude[]> {
+  // This endpoint will return the raw JSON array from the backend
+  const res = await fetch(`${API_BASE}/flights/${flightId}/trajectory/with-attitude`);
+  return handleResponse<DroneAttitude[]>(res);
 }
 
 export async function fetchAnalysis(

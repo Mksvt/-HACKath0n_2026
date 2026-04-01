@@ -16,6 +16,7 @@ class FlightData:
     uploaded_path: Path
     gps_df: pd.DataFrame
     imu_df: pd.DataFrame
+    att_df: pd.DataFrame
     origin_lat: float | None
     origin_lon: float | None
     origin_alt: float | None

@@ -33,6 +33,21 @@ export type TrajectoryPoint = {
   color?: string | null;
 };
 
+export type DroneAttitude = {
+  time: number;
+  x: number;
+  y: number;
+  z: number;
+  roll: number;  // in degrees
+  pitch: number; // in degrees
+  yaw: number;   // in degrees
+};
+
+export type TrajectoryWithAttitudeResponse = {
+  flight_id: string;
+  trajectory: DroneAttitude[];
+};
+
 export type TelemetryResponse = {
   flight_id: string;
   telemetry: TelemetryPoint[];

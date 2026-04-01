@@ -60,7 +60,7 @@ async def upload_flight(
         out.write(content)
     logger.info("Saved uploaded log to {} ({} bytes)", dest, len(content))
 
-    gps_df, imu_df = parser.parse(dest)
+    gps_df, imu_df, att_df = parser.parse(dest)
     if gps_df.empty:
         raise HTTPException(status_code=400, detail="No GPS samples found in log. Cannot proceed.")
 
@@ -76,6 +76,7 @@ async def upload_flight(
             uploaded_path=dest,
             gps_df=gps_df,
             imu_df=imu_df,
+            att_df=att_df,
             origin_lat=float(origin["latitude"]),
             origin_lon=float(origin["longitude"]),
             origin_alt=float(origin["altitude_m"]),
@@ -160,6 +161,46 @@ def get_trajectory(flight_id: str) -> TrajectoryResponse:
         origin_lon=flight.origin_lon or telemetry.iloc[0]["longitude"],
         origin_alt=flight.origin_alt or telemetry.iloc[0]["altitude_m"],
     )
+
+
+@api_router.get("/flights/{flight_id}/trajectory/with-attitude")
+def get_trajectory_with_attitude(flight_id: str) -> list[dict[str, float]]:
+    """
+    Returns the trajectory with drone attitude (roll, pitch, yaw) for 3D visualization.
+    This is the endpoint used by the Three.js frontend component.
+    """
+    flight = _get_flight_or_404(flight_id)
+    
+    if flight.gps_df is None or flight.gps_df.empty:
+        raise HTTPException(status_code=404, detail="GPS data not available")
+    if flight.att_df is None or flight.att_df.empty:
+        raise HTTPException(status_code=404, detail="Attitude data not available")
+    
+    gps_df = flight.gps_df
+    att_df = flight.att_df
+    
+    # Convert GPS to ENU
+    telemetry_df = gps_df.rename(columns={"lat": "latitude", "lon": "longitude", "alt_m": "altitude_m"})
+    telemetry_df = TrajectoryBuilder.to_enu(telemetry_df)
+    
+    # Build trajectory with attitude
+    trajectory = []
+    for _, gps_row in telemetry_df.iterrows():
+        time = gps_row["time_s"]
+        # Find closest ATT by time
+        att_row = att_df.iloc[(att_df["time_s"] - time).abs().idxmin()]
+        
+        trajectory.append({
+            "time": float(time),
+            "x": float(gps_row["enu_x"]),
+            "y": float(gps_row["enu_y"]),
+            "z": float(gps_row["enu_z"]),
+            "roll": float(att_row["roll"]),
+            "pitch": float(att_row["pitch"]),
+            "yaw": float(att_row["yaw"]),
+        })
+    
+    return trajectory
 
 
 @api_router.get("/flights/{flight_id}/analysis", response_model=AnalysisResponse)

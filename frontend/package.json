@@ -9,12 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@react-three/drei": "^9.108.4",
+    "@react-three/fiber": "^8.17.6",
     "@tanstack/react-query": "^5.96.1",
     "cesium": "^1.139.1",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^2.15.4",
+    "three": "^0.164.0",
+    "three-stdlib": "^2.36.1",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
@@ -22,6 +26,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.164.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",

@@ -9,6 +9,7 @@ import {
   fetchMetrics,
   fetchTelemetry,
   fetchTrajectory,
+  fetchTrajectoryWithAttitude,
   uploadLog,
 } from '@/lib/api';
 import { useFlightStore } from '@/store/useFlightStore';
@@ -21,6 +22,7 @@ export function UploadPanel() {
     setMetrics,
     setTelemetry,
     setTrajectory,
+    setTrajectoryWithAttitude,
     setAnalysis,
     setOrigin,
     setAiSummary,
@@ -34,14 +36,17 @@ export function UploadPanel() {
         throw new Error('Only .BIN files are supported');
       }
 
+      console.log('Uploading file:', selectedFile.name, selectedFile.size);
       const upload = await uploadLog(selectedFile);
+      console.log('Upload response:', upload);
       setFlightId(upload.flight_id);
 
-      const [metrics, telemetryRes, trajectoryRes, analysisRes, aiRes] =
+      const [metrics, telemetryRes, trajectoryRes, trajectoryWithAttitudeRes, analysisRes, aiRes] =
         await Promise.all([
           fetchMetrics(upload.flight_id),
           fetchTelemetry(upload.flight_id),
           fetchTrajectory(upload.flight_id),
+          fetchTrajectoryWithAttitude(upload.flight_id),
           fetchAnalysis(upload.flight_id),
           fetchAISummary(
             upload.flight_id,
@@ -52,6 +57,7 @@ export function UploadPanel() {
       setMetrics(metrics);
       setTelemetry(telemetryRes.telemetry);
       setTrajectory(trajectoryRes.trajectory);
+      setTrajectoryWithAttitude(trajectoryWithAttitudeRes);
       setOrigin({
         lat: trajectoryRes.origin_lat,
         lon: trajectoryRes.origin_lon,
@@ -68,7 +74,7 @@ export function UploadPanel() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-slate-300">Ardupilot .BIN upload</p>
-          <h2 className="text-xl font-semibold">Telemetry ingestion</h2>
+          <h2 className="text-xl font-semibold">Telemetry ingestion (GPS + IMU + ATT)</h2>
         </div>
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium hover:bg-slate-700">
           <input
@@ -87,20 +93,21 @@ export function UploadPanel() {
       <div className="mt-4 flex items-center gap-3">
         <button
           onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || !selectedFile}
           className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700"
         >
           {mutation.isPending ? 'Processing...' : 'Upload & analyze'}
         </button>
         {mutation.isSuccess && (
-          <span className="text-sm text-emerald-400">Processed</span>
+          <span className="text-sm text-emerald-400">Processed ✓</span>
         )}
         {error && <span className="text-sm text-rose-400">{error}</span>}
       </div>
       <p className="mt-3 text-xs text-slate-400">
-        We parse GPS and IMU data, compute metrics, convert to ENU
-        (east/north/up) using the first valid GPS point, and build a 3D
-        trajectory. Haversine distance and trapezoidal integration are used per
+        We parse GPS, IMU, and ATT (attitude/orientation) data, compute metrics, 
+        convert WGS-84 to ENU (east/north/up) using the first valid GPS point.
+        The 3D drone visualization uses Three.js with interpolated position and
+        attitude for smooth animation. Distance and integration use Haversine per
         the challenge requirements.
       </p>
     </div>
