@@ -1,0 +1,10 @@
+fastapi==0.110.2
+uvicorn[standard]==0.29.0
+pandas==2.2.2
+numpy==1.26.4
+pymap3d==3.0.1
+pyproj==3.6.1
+python-multipart==0.0.9
+pymavlink==2.4.41
+loguru==0.7.2
+pydantic-settings==2.2.1

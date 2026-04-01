@@ -1,0 +1,20 @@
+version: '3.9'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      - PYTHONPATH=/app
+  frontend:
+    build: ./frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_CESIUM_BASE_URL=https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/
+    ports:
+      - '3000:3000'
+    depends_on:
+      - backend
