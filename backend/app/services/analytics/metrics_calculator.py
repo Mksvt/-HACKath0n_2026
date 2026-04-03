@@ -18,13 +18,11 @@ class MetricsCalculator:
             telemetry = telemetry.merge(imu_df[["time_s", "acc_mag_mps2"]], how="left", on="time_s")
             telemetry = telemetry.sort_values("time_s").reset_index(drop=True)
 
-        # Derive vertical speed if not provided
         if "vz_mps" not in telemetry.columns or telemetry["vz_mps"].isna().all():
             telemetry["vertical_speed_mps"] = telemetry["altitude_m"].diff() / telemetry["time_s"].diff()
         else:
             telemetry["vertical_speed_mps"] = telemetry["vz_mps"]
 
-        # Horizontal speed fallback: compute from positions if missing
         if "spd_mps" not in telemetry.columns or telemetry["spd_mps"].isna().all():
             telemetry["speed_mps"] = telemetry.apply(
                 lambda row: np.nan,
@@ -41,7 +39,6 @@ class MetricsCalculator:
         else:
             telemetry["speed_mps"] = telemetry["spd_mps"]
 
-        # Integrate acceleration to estimate velocity magnitude (trapezoidal rule)
         if "acc_mag_mps2" in telemetry.columns and telemetry["acc_mag_mps2"].notna().any():
             time_series = telemetry["time_s"].to_numpy()
             acc_series = telemetry["acc_mag_mps2"].fillna(method="ffill").fillna(0).to_numpy()

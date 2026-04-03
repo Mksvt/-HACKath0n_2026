@@ -8,10 +8,6 @@ class AnalysisResponse(BaseModel):
     notes: list[str]
 
 
-class AISummaryRequest(BaseModel):
-    prompt: str | None = None
-
-
 class AISummaryResponse(BaseModel):
     flight_id: str
     summary: str

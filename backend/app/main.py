@@ -1,12 +1,25 @@
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.routes import api_router
-from app.core.config import get_settings
+from app.config import get_settings
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    os.makedirs(settings.processed_dir, exist_ok=True)
+    yield
+
+app = FastAPI(
+    lifespan=lifespan,
+    title=settings.app_name,
+    version="0.1.0"
+)
 
 app.add_middleware(
     CORSMiddleware,

@@ -8,3 +8,4 @@ python-multipart==0.0.9
 pymavlink==2.4.41
 loguru==0.7.2
 pydantic-settings==2.2.1
+google-genai==1.70.0
