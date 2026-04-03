@@ -7,8 +7,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from loguru import logger
 
-from app.core.config import Settings, get_settings
-from app.schemas.analysis import AISummaryRequest, AISummaryResponse, AnalysisResponse
+from app.config import Settings, get_settings
+from app.schemas.analysis import AISummaryResponse, AnalysisResponse
 from app.schemas.flight import FlightInfo, FlightUploadResponse
 from app.schemas.metrics import FlightMetrics
 from app.schemas.telemetry import (
@@ -284,12 +284,10 @@ def get_trajectory_with_attitude(flight_id: str) -> list[dict[str, float]]:
     # Convert GPS to ENU
     telemetry_df = gps_df.rename(columns={"lat": "latitude", "lon": "longitude", "alt_m": "altitude_m"})
     telemetry_df = TrajectoryBuilder.to_enu(telemetry_df)
-    
-    # Build trajectory with attitude
+
     trajectory = []
     for _, gps_row in telemetry_df.iterrows():
         time = gps_row["time_s"]
-        # Find closest ATT by time
         att_row = att_df.iloc[(att_df["time_s"] - time).abs().idxmin()]
         
         trajectory.append({
@@ -312,23 +310,14 @@ def analyze(flight_id: str) -> AnalysisResponse:
     if telemetry is None:
         raise HTTPException(status_code=404, detail="Telemetry not computed")
 
-    notes: list[str] = []
-    if telemetry["vertical_speed_mps"].abs().max() > 10:
-        notes.append("Detected aggressive climb/descent (|vz| > 10 m/s).")
-    if telemetry.get("acc_mag_mps2") is not None and telemetry["acc_mag_mps2"].max() > 25:
-        notes.append("Acceleration spike > 25 m/s^2 observed.")
-    if telemetry["speed_mps"].isna().sum() > len(telemetry) * 0.2:
-        notes.append("Large portion of speed samples missing; GPS dropout suspected.")
-    if not notes:
-        notes.append("No obvious anomalies detected with current heuristics.")
-
+    notes = summarizer.get_analysis(telemetry)
     return AnalysisResponse(flight_id=flight_id, notes=notes)
 
 
 @api_router.post("/flights/{flight_id}/ai-summary", response_model=AISummaryResponse)
-def ai_summary(flight_id: str, body: AISummaryRequest) -> AISummaryResponse:
+def ai_summary(flight_id: str) -> AISummaryResponse:
     flight = _get_flight_or_404(flight_id)
     if not flight.metrics:
         raise HTTPException(status_code=404, detail="Metrics not computed")
-    summary_text = summarizer.summarize(flight_id, flight.metrics, prompt=body.prompt)
+    summary_text = summarizer.summarize(flight.metrics)
     return AISummaryResponse(flight_id=flight_id, summary=summary_text, metrics=flight.metrics)

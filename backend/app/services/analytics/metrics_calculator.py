@@ -110,13 +110,11 @@ class MetricsCalculator:
                 **merge_kwargs,
             )
 
-        # Derive vertical speed if not provided
         if "vz_mps" not in telemetry.columns or telemetry["vz_mps"].isna().all():
             telemetry["vertical_speed_mps"] = telemetry["altitude_m"].diff() / telemetry["time_s"].diff()
         else:
             telemetry["vertical_speed_mps"] = telemetry["vz_mps"]
 
-        # Horizontal speed fallback: compute from positions if missing
         if "spd_mps" not in telemetry.columns or telemetry["spd_mps"].isna().all():
             telemetry["speed_mps"] = np.nan
             for idx in range(1, len(telemetry)):
@@ -129,7 +127,6 @@ class MetricsCalculator:
                 telemetry.loc[idx, "speed_mps"] = d / dt
         else:
             telemetry["speed_mps"] = telemetry["spd_mps"]
-
         return telemetry
 
     @staticmethod

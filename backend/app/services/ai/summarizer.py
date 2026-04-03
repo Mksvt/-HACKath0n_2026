@@ -5,38 +5,64 @@ import os
 from urllib import error, request
 
 from loguru import logger
+import pandas as pd
 
 from app.schemas.metrics import FlightMetrics
-
 
 class SimpleAISummarizer:
     """LLM-enabled summarizer with fallback for offline/local environments."""
 
     def __init__(self) -> None:
-        # OpenAI-compatible config (works with OpenRouter, many self-hosted gateways, etc.)
         self.api_key = os.getenv("LLM_API_KEY")
         self.base_url = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
         self.model = os.getenv("LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
         self.timeout_sec = float(os.getenv("LLM_TIMEOUT_SEC", "20"))
 
-    def summarize(self, flight_id: str, metrics: FlightMetrics, prompt: str | None = None) -> str:
-        metrics_context = self._build_metrics_context(flight_id, metrics)
-        effective_prompt = (
-            prompt
-            or "Provide a concise post-flight analysis. Mention potential risks, anomalies, and one next action."
-        )
+    def summarize(self, metrics: FlightMetrics) -> str:
+        prompt = "Provide a concise post-flight analysis with key risks and one suggested next action."
+        metrics_context = self._build_metrics_context(metrics)
 
         if self.api_key:
-            llm_response = self._call_llm(metrics_context, effective_prompt)
+            llm_response = self._call_llm(metrics_context, prompt)
             if llm_response:
                 return llm_response
 
-        return self._fallback_summary(flight_id, metrics, prompt)
+        return self._fallback_summary(metrics)
 
-    def _build_metrics_context(self, flight_id: str, metrics: FlightMetrics) -> str:
+    def get_analysis(self, telemetry_pd: pd.DataFrame) -> list[str]:
+        notes: list[str] = []
+
+        if telemetry_pd is None or telemetry_pd.empty:
+            return ["Telemetry data is empty; no anomaly analysis available."]
+
+        if "vertical_speed_mps" in telemetry_pd.columns:
+            max_abs_vz = float(telemetry_pd["vertical_speed_mps"].abs().max())
+            if max_abs_vz > 10:
+                notes.append("Detected aggressive climb/descent profile (|vertical speed| > 10 m/s).")
+
+        if "acc_mag_mps2" in telemetry_pd.columns:
+            max_acc = float(telemetry_pd["acc_mag_mps2"].max())
+            if max_acc > 25:
+                notes.append("Detected acceleration spike above 25 m/s^2.")
+
+        if "speed_mps" in telemetry_pd.columns and len(telemetry_pd) > 0:
+            missing_ratio = float(telemetry_pd["speed_mps"].isna().sum()) / float(len(telemetry_pd))
+            if missing_ratio > 0.2:
+                notes.append("Large portion of horizontal speed samples is missing; GPS dropout suspected.")
+
+        if "altitude_m" in telemetry_pd.columns:
+            min_alt = float(telemetry_pd["altitude_m"].min())
+            if min_alt < 0:
+                notes.append("Altitude dropped below sea level; potential crash or altimeter anomaly.")
+
+        if not notes:
+            notes.append("No obvious anomalies detected by heuristic checks.")
+
+        return notes
+
+    def _build_metrics_context(self, metrics: FlightMetrics) -> str:
         return "\n".join(
             [
-                f"Flight ID: {flight_id}",
                 f"Duration: {metrics.total_duration_sec:.2f} s",
                 f"Total distance: {metrics.total_distance_m:.2f} m",
                 f"Max altitude gain: {metrics.max_altitude_gain_m:.2f} m",
@@ -71,7 +97,6 @@ class SimpleAISummarizer:
             "Content-Type": "application/json",
         }
 
-        # OpenRouter accepts these optional headers for tracking/rate insights.
         if "openrouter.ai" in self.base_url:
             headers["HTTP-Referer"] = os.getenv("LLM_APP_URL", "http://localhost")
             headers["X-Title"] = os.getenv("LLM_APP_NAME", "UAV Telemetry Analysis")
@@ -91,7 +116,7 @@ class SimpleAISummarizer:
             details = exc.read().decode("utf-8", errors="ignore") if exc.fp else ""
             logger.warning("LLM request failed with HTTP {}: {}", exc.code, details)
             return None
-        except Exception as exc:  # noqa: BLE001 - fallback should handle all network/runtime errors.
+        except Exception as exc:  # noqa: BLE001
             logger.warning("LLM request failed: {}", exc)
             return None
 
@@ -107,7 +132,7 @@ class SimpleAISummarizer:
             return None
         return str(content).strip()
 
-    def _fallback_summary(self, flight_id: str, metrics: FlightMetrics, prompt: str | None = None) -> str:
+    def _fallback_summary(self, metrics: FlightMetrics) -> str:
         risk_flags: list[str] = []
         if metrics.max_vertical_speed_mps > 8:
             risk_flags.append("aggressive climb/descent profile")
@@ -117,7 +142,7 @@ class SimpleAISummarizer:
             risk_flags.append("high horizontal speed")
 
         lines = [
-            f"Flight {flight_id} summary:",
+            "Flight summary:",
             f"- Duration: {metrics.total_duration_sec:.1f} s",
             f"- Total distance: {metrics.total_distance_m:.1f} m",
             f"- Max altitude gain: {metrics.max_altitude_gain_m:.1f} m",
@@ -129,7 +154,5 @@ class SimpleAISummarizer:
             lines.append(f"- Risk flags: {', '.join(risk_flags)}")
         else:
             lines.append("- Risk flags: none detected by rule-based fallback")
-        if prompt:
-            lines.append(f"Prompt: {prompt}")
         lines.append("Note: Fallback summary used (set LLM_API_KEY + LLM_MODEL to enable live LLM analysis).")
         return "\n".join(lines)
