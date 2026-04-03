@@ -39,7 +39,10 @@ export function CesiumViewer({ trajectory, origin, colorMode = 'speed' }: Props)
 
         // ── 2. Dynamic import + base-URL patch ───────────────────────────────
         const Cesium = await import('cesium');
-        Cesium.buildModuleUrl.setBaseUrl(CESIUM_BASE_URL);
+        const buildModuleUrl = Cesium.buildModuleUrl as unknown as {
+          setBaseUrl?: (url: string) => void;
+        };
+        buildModuleUrl.setBaseUrl?.(CESIUM_BASE_URL);
 
         const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2MmU3ZTFkYy00ODk1LTQwOGMtYjc4MS05MGIxYjQ0YTlhNGYiLCJpZCI6NDEyMzUyLCJpYXQiOjE3NzUwNDY4ODl9.TNm4F4wo2bhp4O4YZ9NX_wfiet3lUlsdX5GQ0tLx5Aw';
         if (!token) {

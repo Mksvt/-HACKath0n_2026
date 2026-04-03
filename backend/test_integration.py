@@ -2,15 +2,33 @@
 """
 Integration test: upload a BIN file and fetch the trajectory with attitude
 """
+import os
 import requests
 import json
 from pathlib import Path
 
-API_BASE = "http://localhost:8000/api/v1"
-BIN_FILE = Path("/c/Users/ConceptSpace/Desktop/-HACKath0n_2026/backend/data/uploads/19cd22a4-6c29-45ff-9929-73e392f3a07a.BIN")
+API_BASE = os.getenv("API_BASE", "http://localhost:8000/api/v1")
 
-if not BIN_FILE.exists():
-    print(f"File not found: {BIN_FILE}")
+
+def find_bin_file() -> Path | None:
+    candidates = [
+        Path(__file__).resolve().parent / "data" / "uploads",
+        Path("./data/uploads"),
+        Path("./backend/data/uploads"),
+    ]
+    for directory in candidates:
+        if not directory.exists():
+            continue
+        files = sorted(directory.glob("*.BIN"))
+        if files:
+            return files[0]
+    return None
+
+
+BIN_FILE = find_bin_file()
+
+if BIN_FILE is None:
+    print("No .BIN file found in known upload directories")
     exit(1)
 
 print("📤 Uploading file...")

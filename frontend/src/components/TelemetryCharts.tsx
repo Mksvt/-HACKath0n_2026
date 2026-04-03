@@ -121,7 +121,7 @@ function ChartCard({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">

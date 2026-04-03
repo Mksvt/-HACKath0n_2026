@@ -26,3 +26,20 @@ def test_metrics_computation():
     assert metrics.max_vertical_speed_mps >= 1.0
     assert metrics.max_horizontal_speed_mps >= 5.0
     assert metrics.total_distance_m > 0
+
+
+def test_filter_gps_outliers_drops_isolated_first_glitch():
+    gps_df = pd.DataFrame(
+        {
+            "time_s": [0.0, 1.0, 2.0, 3.0],
+            "lat": [0.0, 48.0, 48.00001, 48.00002],
+            "lon": [0.0, 2.0, 2.00001, 2.00002],
+            "alt_m": [10.0, 10.1, 10.2, 10.3],
+        }
+    )
+
+    filtered, dropped = MetricsCalculator.filter_gps_outliers(gps_df, max_segment_m=1000.0, max_speed_mps=120.0)
+
+    assert dropped == 1
+    assert len(filtered) == 3
+    assert filtered.iloc[0]["lat"] == 48.0

@@ -11,7 +11,13 @@ from app.core.config import Settings, get_settings
 from app.schemas.analysis import AISummaryRequest, AISummaryResponse, AnalysisResponse
 from app.schemas.flight import FlightInfo, FlightUploadResponse
 from app.schemas.metrics import FlightMetrics
-from app.schemas.telemetry import TelemetryPoint, TelemetryResponse, TrajectoryResponse
+from app.schemas.telemetry import (
+    SensorStreamMetadata,
+    TelemetryMetadata,
+    TelemetryPoint,
+    TelemetryResponse,
+    TrajectoryResponse,
+)
 from app.services.ai.summarizer import SimpleAISummarizer
 from app.services.analytics.metrics_calculator import MetricsCalculator
 from app.services.log_parser.ardupilot_parser import ArdupilotLogParser
@@ -44,6 +50,75 @@ def _get_flight_or_404(flight_id: str) -> FlightData:
     return flight
 
 
+def _sampling_hz_or_none(df) -> float | None:
+    if df is None or df.empty or "sampling_hz" not in df.columns:
+        return None
+    values = df["sampling_hz"].dropna()
+    if values.empty:
+        return None
+    return float(values.iloc[0])
+
+
+def _column_value_or_none(df, column: str) -> float | None:
+    if df is None or df.empty or column not in df.columns:
+        return None
+    values = df[column].dropna()
+    if values.empty:
+        return None
+    return float(values.iloc[0])
+
+
+def _build_telemetry_metadata(flight: FlightData) -> TelemetryMetadata:
+    gps_normalization: dict[str, float] = {}
+    if flight.gps_speed_scale is not None:
+        gps_normalization["speed_scale"] = float(flight.gps_speed_scale)
+    if flight.gps_vertical_speed_scale is not None:
+        gps_normalization["vertical_speed_scale"] = float(flight.gps_vertical_speed_scale)
+
+    gps_meta = SensorStreamMetadata(
+        samples=len(flight.gps_df),
+        raw_samples=len(flight.gps_df) + int(flight.gps_outliers_removed),
+        dropped_samples=int(flight.gps_outliers_removed),
+        sampling_hz=_sampling_hz_or_none(flight.gps_df),
+        units={
+            "latitude": "deg",
+            "longitude": "deg",
+            "altitude_m": "m",
+            "speed_mps": "m/s",
+            "vertical_speed_mps": "m/s",
+            "time_s": "s",
+        },
+        normalization=gps_normalization,
+    )
+
+    imu_meta = SensorStreamMetadata(
+        samples=len(flight.imu_df),
+        sampling_hz=_sampling_hz_or_none(flight.imu_df),
+        units={
+            "acc_x": "m/s^2",
+            "acc_y": "m/s^2",
+            "acc_z": "m/s^2",
+            "acc_mag_mps2": "m/s^2",
+            "time_s": "s",
+        },
+    )
+
+    att_meta = None
+    if flight.att_df is not None and not flight.att_df.empty:
+        att_meta = SensorStreamMetadata(
+            samples=len(flight.att_df),
+            sampling_hz=_sampling_hz_or_none(flight.att_df),
+            units={
+                "roll": "deg",
+                "pitch": "deg",
+                "yaw": "deg",
+                "time_s": "s",
+            },
+        )
+
+    return TelemetryMetadata(gps=gps_meta, imu=imu_meta, att=att_meta)
+
+
 @api_router.post("/flights/upload", response_model=FlightUploadResponse)
 async def upload_flight(
     file: UploadFile = File(...),
@@ -61,12 +136,32 @@ async def upload_flight(
     logger.info("Saved uploaded log to {} ({} bytes)", dest, len(content))
 
     gps_df, imu_df, att_df = parser.parse(dest)
+    raw_gps_samples = len(gps_df)
+    gps_df, gps_outliers_removed = MetricsCalculator.filter_gps_outliers(
+        gps_df,
+        max_segment_m=settings.gps_outlier_max_segment_m,
+        max_speed_mps=settings.gps_outlier_max_speed_mps,
+    )
     if gps_df.empty:
         raise HTTPException(status_code=400, detail="No GPS samples found in log. Cannot proceed.")
 
+    if gps_outliers_removed > 0:
+        logger.warning(
+            "Removed {} GPS outlier samples from {} ({} -> {} points, max_segment_m={}, max_speed_mps={})",
+            gps_outliers_removed,
+            filename,
+            raw_gps_samples,
+            len(gps_df),
+            settings.gps_outlier_max_segment_m,
+            settings.gps_outlier_max_speed_mps,
+        )
+
+    gps_speed_scale = _column_value_or_none(gps_df, "spd_scale")
+    gps_vertical_speed_scale = _column_value_or_none(gps_df, "vz_scale")
+
     telemetry_df = MetricsCalculator.compute_telemetry(gps_df, imu_df)
     telemetry_df = TrajectoryBuilder.to_enu(telemetry_df)
-    metrics = MetricsCalculator.compute_metrics(telemetry_df)
+    metrics = MetricsCalculator.compute_metrics(telemetry_df, imu_df=imu_df)
 
     origin = telemetry_df.iloc[0]
     flight_store.add(
@@ -80,6 +175,9 @@ async def upload_flight(
             origin_lat=float(origin["latitude"]),
             origin_lon=float(origin["longitude"]),
             origin_alt=float(origin["altitude_m"]),
+            gps_outliers_removed=gps_outliers_removed,
+            gps_speed_scale=gps_speed_scale,
+            gps_vertical_speed_scale=gps_vertical_speed_scale,
             telemetry_df=telemetry_df,
             trajectory_df=telemetry_df[["enu_x", "enu_y", "enu_z", "speed_mps"]],
             metrics=metrics,
@@ -136,7 +234,11 @@ def get_telemetry(flight_id: str) -> TelemetryResponse:
         .to_dict(orient="records")
     ]
 
-    return TelemetryResponse(flight_id=flight_id, telemetry=telemetry_points)
+    return TelemetryResponse(
+        flight_id=flight_id,
+        telemetry=telemetry_points,
+        metadata=_build_telemetry_metadata(flight),
+    )
 
 
 @api_router.get("/flights/{flight_id}/metrics", response_model=FlightMetrics)

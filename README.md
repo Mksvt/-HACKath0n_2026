@@ -25,7 +25,7 @@ Install the extra runtime deps manually (keeps user control):
 
 ```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
 # if lockfile is stale after adding deps: npm install cesium @tanstack/react-query zustand recharts
 npm run dev
 ```
@@ -49,11 +49,35 @@ Frontend on http://localhost:3000, backend on http://localhost:8000.
 
 - POST `/api/v1/flights/upload` — upload `.BIN`, parse, compute metrics
 - GET `/api/v1/flights/{flight_id}` — flight metadata
-- GET `/api/v1/flights/{flight_id}/telemetry` — normalized telemetry with ENU and acceleration
+- GET `/api/v1/flights/{flight_id}/telemetry` — normalized telemetry with ENU/acceleration + sensor sampling metadata
 - GET `/api/v1/flights/{flight_id}/trajectory` — ENU polyline + origin
 - GET `/api/v1/flights/{flight_id}/metrics` — summary metrics
 - GET `/api/v1/flights/{flight_id}/analysis` — heuristic anomaly notes
-- POST `/api/v1/flights/{flight_id}/ai-summary` — text summary stub
+- POST `/api/v1/flights/{flight_id}/ai-summary` — LLM summary (falls back to local rule-based summary if no key)
+
+### Optional LLM setup for AI summary
+
+Set these environment variables for live LLM analysis (OpenAI-compatible API):
+
+```bash
+LLM_API_KEY=<your_api_key>
+LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_TIMEOUT_SEC=20
+```
+
+If `LLM_API_KEY` is not set, backend returns a deterministic fallback summary so the endpoint remains usable offline.
+
+### Optional GPS outlier filter tuning
+
+You can tune GPS glitch rejection thresholds via env vars:
+
+```bash
+GPS_OUTLIER_MAX_SEGMENT_M=1000
+GPS_OUTLIER_MAX_SPEED_MPS=120
+```
+
+Lower values reject more aggressive jumps; higher values are more permissive.
 
 ## Implementation notes
 
@@ -69,6 +93,8 @@ Frontend on http://localhost:3000, backend on http://localhost:8000.
 ```bash
 pytest backend/tests
 ```
+
+Integration tests now include API contract checks against real `.BIN` files from `backend/data/uploads`.
 
 ## Next steps
 

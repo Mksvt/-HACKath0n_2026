@@ -20,6 +20,9 @@ class FlightData:
     origin_lat: float | None
     origin_lon: float | None
     origin_alt: float | None
+    gps_outliers_removed: int = 0
+    gps_speed_scale: float | None = None
+    gps_vertical_speed_scale: float | None = None
     metrics: FlightMetrics | None = None
     telemetry_df: pd.DataFrame | None = None
     trajectory_df: pd.DataFrame | None = None
