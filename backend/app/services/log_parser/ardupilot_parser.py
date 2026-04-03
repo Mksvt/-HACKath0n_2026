@@ -48,8 +48,8 @@ class ArdupilotLogParser:
                 gps_records.append(
                     {
                         "time_s": time_s,
-                        "lat": float(lat_raw) / 1e7,
-                        "lon": float(lon_raw) / 1e7,
+                        "lat": float(lat_raw),
+                        "lon": float(lon_raw),
                         "alt_m": float(alt_raw) / 100.0,
                         "spd_mps": float(getattr(msg, "Spd", 0.0)) / 100.0,
                         "vz_mps": float(getattr(msg, "VZ", 0.0)) / 100.0,
