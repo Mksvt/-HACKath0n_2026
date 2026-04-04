@@ -71,3 +71,44 @@ export type AISummaryResponse = {
   summary: string;
   metrics: FlightMetrics;
 };
+
+export type PartCategory =
+  | 'frame' | 'motors' | 'propellers' | 'esc'
+  | 'battery' | 'flightController' | 'gps'
+  | 'camera' | 'payload';
+
+export type DronePart = {
+  id: string;
+  name: string;
+  category: PartCategory;
+  tier: number;
+  weight_g: number;
+  color: string;
+  speedFactor: number;
+  agilityFactor: number;
+  rotationRate: number;
+  scale: number;
+  description: string;
+};
+
+export type DroneConfig = {
+  frame: DronePart;
+  motors: DronePart;
+  propellers: DronePart;
+  esc: DronePart;
+  battery: DronePart;
+  flightController: DronePart;
+  gps: DronePart;
+  camera: DronePart;
+  payload: DronePart;
+};
+
+export type FlightPattern = 'line' | 'circle' | 'figure8' | 'square' | 'random' | 'helix';
+
+export type FreeFlightConfig = {
+  pattern: FlightPattern;
+  distance_m: number;
+  altitude_m: number;
+  startX: number;
+  startY: number;
+};

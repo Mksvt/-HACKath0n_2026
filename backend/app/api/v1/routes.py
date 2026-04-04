@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
+import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from loguru import logger
 
@@ -269,37 +270,122 @@ def get_trajectory(flight_id: str) -> TrajectoryResponse:
 def get_trajectory_with_attitude(flight_id: str) -> list[dict[str, float]]:
     """
     Returns the trajectory with drone attitude (roll, pitch, yaw) for 3D visualization.
-    This is the endpoint used by the Three.js frontend component.
+    Attitude is interpolated from the higher-rate ATT stream onto GPS timestamps,
+    then smoothed with an exponential moving average to reduce jumpiness.
     """
     flight = _get_flight_or_404(flight_id)
-    
+
     if flight.gps_df is None or flight.gps_df.empty:
         raise HTTPException(status_code=404, detail="GPS data not available")
     if flight.att_df is None or flight.att_df.empty:
         raise HTTPException(status_code=404, detail="Attitude data not available")
-    
+
     gps_df = flight.gps_df
-    att_df = flight.att_df
-    
-    # Convert GPS to ENU
+    att_df = flight.att_df.sort_values("time_s").reset_index(drop=True)
+
     telemetry_df = gps_df.rename(columns={"lat": "latitude", "lon": "longitude", "alt_m": "altitude_m"})
     telemetry_df = TrajectoryBuilder.to_enu(telemetry_df)
 
-    trajectory = []
+    att_times = att_df["time_s"].to_numpy(dtype=float)
+    att_roll = att_df["roll"].to_numpy(dtype=float)
+    att_pitch = att_df["pitch"].to_numpy(dtype=float)
+    att_yaw = att_df["yaw"].to_numpy(dtype=float)
+
+    def _interp_angle(times_src: np.ndarray, vals_src: np.ndarray, t: float, wrap: float = 0) -> float:
+        """Linear interpolation for an angle series at time *t*.
+        If *wrap* > 0 the angle is assumed to wrap at that value (e.g. 360 for yaw)."""
+        idx = int(np.searchsorted(times_src, t, side="right"))
+        if idx == 0:
+            return float(vals_src[0])
+        if idx >= len(times_src):
+            return float(vals_src[-1])
+
+        t0 = times_src[idx - 1]
+        t1 = times_src[idx]
+        dt = t1 - t0
+        if dt <= 0:
+            return float(vals_src[idx])
+
+        frac = (t - t0) / dt
+        a = float(vals_src[idx - 1])
+        b = float(vals_src[idx])
+
+        if wrap > 0:
+            diff = b - a
+            if diff > wrap / 2:
+                b -= wrap
+            elif diff < -wrap / 2:
+                b += wrap
+            result = a + frac * (b - a)
+            return result % wrap
+        else:
+            return a + frac * (b - a)
+
+    raw_rolls: list[float] = []
+    raw_pitches: list[float] = []
+    raw_yaws: list[float] = []
+    times_out: list[float] = []
+    xs: list[float] = []
+    ys: list[float] = []
+    zs: list[float] = []
+
     for _, gps_row in telemetry_df.iterrows():
-        time = gps_row["time_s"]
-        att_row = att_df.iloc[(att_df["time_s"] - time).abs().idxmin()]
-        
-        trajectory.append({
-            "time": float(time),
-            "x": float(gps_row["enu_x"]),
-            "y": float(gps_row["enu_y"]),
-            "z": float(gps_row["enu_z"]),
-            "roll": float(att_row["roll"]),
-            "pitch": float(att_row["pitch"]),
-            "yaw": float(att_row["yaw"]),
-        })
-    
+        t = float(gps_row["time_s"])
+        times_out.append(t)
+        xs.append(float(gps_row["enu_x"]))
+        ys.append(float(gps_row["enu_y"]))
+        zs.append(float(gps_row["enu_z"]))
+        raw_rolls.append(_interp_angle(att_times, att_roll, t))
+        raw_pitches.append(_interp_angle(att_times, att_pitch, t))
+        raw_yaws.append(_interp_angle(att_times, att_yaw, t, wrap=360))
+
+    def _angle_diff(a: float, b: float, wrap: float = 0) -> float:
+        """Shortest signed difference b - a, handling wrapping."""
+        d = b - a
+        if wrap > 0:
+            d = (d + wrap / 2) % wrap - wrap / 2
+        return d
+
+    def _ema_smooth(vals: list[float], alpha: float = 0.3, wrap: float = 0,
+                    max_rate: float = 0) -> list[float]:
+        """EMA with optional angle wrapping and rate limiting (deg per step)."""
+        if not vals:
+            return vals
+        out = [vals[0]]
+        for i in range(1, len(vals)):
+            prev = out[-1]
+            cur = vals[i]
+            diff = _angle_diff(prev, cur, wrap)
+            if max_rate > 0 and abs(diff) > max_rate:
+                diff = max_rate if diff > 0 else -max_rate
+            smoothed = prev + alpha * diff
+            if wrap > 0:
+                smoothed = smoothed % wrap
+            out.append(smoothed)
+        return out
+
+    dt_gps = 0.2
+    max_roll_rate = 60 * dt_gps   # 60°/s max angular velocity
+    max_pitch_rate = 60 * dt_gps
+    max_yaw_rate = 90 * dt_gps    # yaw can change faster during turns
+
+    sm_rolls = _ema_smooth(raw_rolls, alpha=0.25, max_rate=max_roll_rate)
+    sm_pitches = _ema_smooth(raw_pitches, alpha=0.25, max_rate=max_pitch_rate)
+    sm_yaws = _ema_smooth(raw_yaws, alpha=0.25, wrap=360, max_rate=max_yaw_rate)
+
+    trajectory = [
+        {
+            "time": times_out[i],
+            "x": xs[i],
+            "y": ys[i],
+            "z": zs[i],
+            "roll": round(sm_rolls[i], 4),
+            "pitch": round(sm_pitches[i], 4),
+            "yaw": round(sm_yaws[i], 4),
+        }
+        for i in range(len(times_out))
+    ]
+
     return trajectory
 
 

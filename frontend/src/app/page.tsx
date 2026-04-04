@@ -10,7 +10,7 @@ import { useFlightStore } from '@/store/useFlightStore';
 import { useState } from 'react';
 
 export default function Home() {
-  const { trajectory, origin, trajectoryWithAttitude } = useFlightStore();
+  const { trajectory, origin, trajectoryWithAttitude, telemetry } = useFlightStore();
   const [viewMode, setViewMode] = useState<'cesium' | 'drone'>('drone');
 
   return (
@@ -66,12 +66,16 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 3D Visualization */}
+        {/* 3D Visualization — drone view gets negative margins for wider feel */}
         {viewMode === 'drone' ? (
-          <DroneViewer trajectory={trajectoryWithAttitude} />
+          <div className="-mx-4 md:-mx-10">
+            <DroneViewer trajectory={trajectoryWithAttitude} telemetry={telemetry} />
+          </div>
         ) : (
           <CesiumViewer
             trajectory={trajectory}
+            trajectoryWithAttitude={trajectoryWithAttitude}
+            telemetry={telemetry}
             origin={origin}
             colorMode="speed"
           />
