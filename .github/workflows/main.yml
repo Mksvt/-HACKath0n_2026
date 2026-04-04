@@ -1,0 +1,35 @@
+name: Deploy main to VM
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, hackaton-vm]
+
+    steps:
+      - name: Deploy on VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO_DIR=/home/user/hackaton
+
+          if [ ! -d "$REPO_DIR/.git" ]; then
+            git clone https://github.com/Mksvt/-HACKath0n_2026.git "$REPO_DIR"
+          fi
+
+          cd "$REPO_DIR"
+          git fetch origin main
+          git checkout -B main origin/main
+
+          sudo docker compose down --remove-orphans
+          sudo docker compose up -d --build
+
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS -o /dev/null http://127.0.0.1:3000
