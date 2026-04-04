@@ -40,10 +40,93 @@ NEXT_PUBLIC_CESIUM_BASE_URL=https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Ce
 ### 3) Docker
 
 ```bash
-docker-compose up --build
+docker compose up -d --build
 ```
 
-Frontend on http://localhost:3000, backend on http://localhost:8000.
+Frontend and backend are exposed on host ports configured in `docker-compose.yml`.
+
+For example, if your server IP is `192.168.1.50`, open `http://192.168.1.50:3000` from any device in your home network.
+
+## Proxmox setup (home server, LAN access)
+
+Recommended path: run this stack inside an Ubuntu VM in Proxmox (simpler and more stable than Docker inside unprivileged LXC for most home setups).
+
+### 1) Create VM in Proxmox
+
+1. Create VM with Ubuntu Server 22.04/24.04.
+2. Attach VM network to a bridged interface (usually `vmbr0`) so VM gets an IP in your LAN.
+3. Suggested resources: 2 vCPU, 4-8 GB RAM, 20+ GB disk.
+
+### 2) Configure static LAN IP inside VM
+
+Use netplan (example):
+
+```yaml
+# /etc/netplan/01-netcfg.yaml
+network:
+	version: 2
+	renderer: networkd
+	ethernets:
+		ens18:
+			dhcp4: no
+			addresses: [192.168.1.50/24]
+			routes:
+				- to: default
+					via: 192.168.1.1
+			nameservers:
+				addresses: [1.1.1.1,8.8.8.8]
+```
+
+Apply:
+
+```bash
+sudo netplan apply
+ip a
+```
+
+### 3) Install Docker Engine + Compose plugin
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+```
+
+Re-login to apply docker group permissions.
+
+### 4) Run this project
+
+```bash
+git clone <your_repo_url>
+cd hackaton
+docker compose up -d --build
+docker compose ps
+```
+
+### 5) Open from another device
+
+From phone/laptop in the same LAN:
+
+- `http://192.168.1.50:3000` (UI)
+- `http://192.168.1.50:8000/health` (API health)
+
+### 6) Proxmox and VM firewall checks
+
+Allow inbound TCP `3000` and `8000`:
+
+1. Proxmox Datacenter/Node/VM firewall rules (if enabled).
+2. VM firewall (`ufw`) rules (if enabled):
+
+```bash
+sudo ufw allow 3000/tcp
+sudo ufw allow 8000/tcp
+sudo ufw status
+```
 
 ## API surface (v1)
 
