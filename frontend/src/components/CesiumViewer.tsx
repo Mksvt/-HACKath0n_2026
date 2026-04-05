@@ -34,6 +34,7 @@ export function CesiumViewer({
   const droneEntityRef = useRef<any>(null);
   const cesiumRef = useRef<any>(null);
   const enuFrameRef = useRef<any>(null);
+  const headingRef = useRef(0);
   const positionsRef = useRef<any[]>([]);
   const hasTrajectoryData = Boolean(trajectory?.length && origin);
 
@@ -162,13 +163,19 @@ export function CesiumViewer({
           trajectoryWithAttitude.length > 0 &&
           positions.length > 0
         ) {
+          const initialOrientation = computeOrientationFromTrajectoryDirection(
+            Cesium,
+            enuFrame,
+            trajectoryWithAttitude,
+            0,
+            altScale,
+            headingRef.current,
+          );
+          headingRef.current = initialOrientation.headingRad;
+
           const droneEntity = viewer.entities.add({
             position: positions[0],
-            orientation: computeOrientation(
-              Cesium,
-              enuFrame,
-              trajectoryWithAttitude[0],
-            ),
+            orientation: initialOrientation.quaternion,
             model: {
               uri: '/models/drone/Drone.glb',
               minimumPixelSize: 64,
@@ -251,8 +258,19 @@ export function CesiumViewer({
       local,
       new Cesium.Cartesian3(),
     );
+
+    const orientation = computeOrientationFromTrajectoryDirection(
+      Cesium,
+      enuFrame,
+      trajectoryWithAttitude,
+      safeIdx,
+      altScale,
+      headingRef.current,
+    );
+    headingRef.current = orientation.headingRad;
+
     entity.position = ecef;
-    entity.orientation = computeOrientation(Cesium, enuFrame, point);
+    entity.orientation = orientation.quaternion;
 
     viewer.scene.requestRender();
   }, [currentFrame, trajectoryWithAttitude, altScale]);
@@ -537,21 +555,49 @@ function CoordRow({
   );
 }
 
-function computeOrientation(Cesium: any, enuFrame: any, point: DroneAttitude) {
-  // ArduPilot → Cesium convention:
-  // yaw:   both use clockwise-from-North — direct map to heading
-  // pitch: ArduPilot nose-UP positive, Cesium nose-DOWN positive → negate
-  // roll:  ArduPilot right-wing-DOWN positive, Cesium right-wing-UP positive → negate
-  const headingRad = Cesium.Math.toRadians(point.yaw);
-  const pitchRad = Cesium.Math.toRadians(-point.pitch);
-  const rollRad = Cesium.Math.toRadians(-point.roll);
+function computeOrientationFromTrajectoryDirection(
+  Cesium: any,
+  enuFrame: any,
+  points: DroneAttitude[],
+  index: number,
+  altScale: number,
+  fallbackHeadingRad: number,
+): { quaternion: any; headingRad: number } {
+  const safeIndex = Math.max(0, Math.min(index, points.length - 1));
+  const current = points[safeIndex];
+  const next = points[Math.min(safeIndex + 1, points.length - 1)];
+  const prev = points[Math.max(safeIndex - 1, 0)];
 
-  const hpr = new Cesium.HeadingPitchRoll(headingRad, pitchRad, rollRad);
-  const origin = Cesium.Matrix4.getTranslation(
+  const dirX =
+    safeIndex < points.length - 1 ? next.x - current.x : current.x - prev.x;
+  const dirY =
+    safeIndex < points.length - 1 ? next.y - current.y : current.y - prev.y;
+
+  // Cesium HPR heading is referenced to local East axis. Convert ENU direction
+  // vector to this convention so the drone nose follows the trajectory.
+  const headingRad =
+    Math.hypot(dirX, dirY) > 1e-4
+      ? -Math.atan2(dirY, dirX)
+      : fallbackHeadingRad;
+
+  // Keep drone level to avoid unnatural roll/pitch from noisy attitude logs.
+  const hpr = new Cesium.HeadingPitchRoll(headingRad, 0, 0);
+
+  const local = new Cesium.Cartesian3(
+    current.x,
+    current.y,
+    current.z * altScale,
+  );
+  const position = Cesium.Matrix4.multiplyByPoint(
     enuFrame,
+    local,
     new Cesium.Cartesian3(),
   );
-  return Cesium.Transforms.headingPitchRollQuaternion(origin, hpr);
+
+  return {
+    quaternion: Cesium.Transforms.headingPitchRollQuaternion(position, hpr),
+    headingRad,
+  };
 }
 
 function waitForSize(

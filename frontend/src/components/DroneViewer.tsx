@@ -5,10 +5,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three-stdlib';
 import { OBJLoader } from 'three-stdlib';
 import { MTLLoader } from 'three-stdlib';
-import { DroneAttitude, DroneConfig, TelemetryPoint, FreeFlightConfig } from '@/types/api';
 import {
-  DEFAULT_CONFIG, computeModifiers,
-  DEFAULT_FREE_FLIGHT, generateFreeFlightTrajectory,
+  DroneAttitude,
+  DroneConfig,
+  TelemetryPoint,
+  FreeFlightConfig,
+} from '@/types/api';
+import {
+  DEFAULT_CONFIG,
+  computeModifiers,
+  DEFAULT_FREE_FLIGHT,
+  generateFreeFlightTrajectory,
 } from '@/lib/droneparts';
 import { DroneConstructor } from './DroneConstructor';
 
@@ -18,9 +25,12 @@ interface DroneViewerProps {
 }
 
 function computeBounds(trajectory: DroneAttitude[]) {
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-  let minZ = Infinity, maxZ = -Infinity;
+  let minX = Infinity,
+    maxX = -Infinity;
+  let minY = Infinity,
+    maxY = -Infinity;
+  let minZ = Infinity,
+    maxZ = -Infinity;
 
   for (const pt of trajectory) {
     if (pt.x < minX) minX = pt.x;
@@ -32,7 +42,12 @@ function computeBounds(trajectory: DroneAttitude[]) {
   }
 
   return {
-    minX, maxX, minY, maxY, minZ, maxZ,
+    minX,
+    maxX,
+    minY,
+    maxY,
+    minZ,
+    maxZ,
     centerX: (minX + maxX) / 2,
     centerY: (minY + maxY) / 2,
     centerZ: (minZ + maxZ) / 2,
@@ -47,7 +62,10 @@ function lerpAngle(current: number, target: number, t: number): number {
   return current + diff * t;
 }
 
-export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: DroneViewerProps) {
+export function DroneViewer({
+  trajectory: uploadedTrajectory,
+  telemetry,
+}: DroneViewerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -68,26 +86,47 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
   const [modelLoaded, setModelLoaded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [droneConfig, setDroneConfig] = useState<DroneConfig>(DEFAULT_CONFIG);
-  const [freeFlightCfg, setFreeFlightCfg] = useState<FreeFlightConfig>(DEFAULT_FREE_FLIGHT);
+  const [freeFlightCfg, setFreeFlightCfg] =
+    useState<FreeFlightConfig>(DEFAULT_FREE_FLIGHT);
+  const [forceSimulation, setForceSimulation] = useState(false);
 
   const mods = useMemo(() => computeModifiers(droneConfig), [droneConfig]);
 
   const hasUploaded = !!(uploadedTrajectory && uploadedTrajectory.length > 0);
+  const isUsingUploaded = hasUploaded && !forceSimulation;
+
+  const handleFreeFlightChange = useCallback((cfg: FreeFlightConfig) => {
+    setFreeFlightCfg(cfg);
+    setForceSimulation(true);
+  }, []);
 
   const freeTrajectory = useMemo(
-    () => (!hasUploaded ? generateFreeFlightTrajectory(freeFlightCfg, mods) : null),
-    [hasUploaded, freeFlightCfg, mods],
+    () => generateFreeFlightTrajectory(freeFlightCfg, mods),
+    [freeFlightCfg, mods],
   );
 
-  const trajectory = hasUploaded ? uploadedTrajectory! : freeTrajectory!;
+  const trajectory = isUsingUploaded ? uploadedTrajectory! : freeTrajectory;
+
+  useEffect(() => {
+    if (hasUploaded) {
+      setForceSimulation(false);
+    }
+  }, [hasUploaded, uploadedTrajectory]);
+
+  useEffect(() => {
+    frameRef.current = 0;
+    setCurrentFrame(0);
+  }, [isUsingUploaded, trajectory.length]);
 
   const bounds = useMemo(
-    () => (trajectory && trajectory.length > 0 ? computeBounds(trajectory) : null),
+    () =>
+      trajectory && trajectory.length > 0 ? computeBounds(trajectory) : null,
     [trajectory],
   );
 
   const currentTelemetry = useMemo(() => {
-    if (!trajectory || !telemetry || telemetry.length === 0) return null;
+    if (!isUsingUploaded || !trajectory || !telemetry || telemetry.length === 0)
+      return null;
     const frameIdx = Math.floor(currentFrame);
     if (frameIdx < 0 || frameIdx >= trajectory.length) return null;
     const t = trajectory[frameIdx].time;
@@ -95,10 +134,13 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
     let bestDiff = Math.abs(best.timestamp - t);
     for (let i = 1; i < telemetry.length; i++) {
       const diff = Math.abs(telemetry[i].timestamp - t);
-      if (diff < bestDiff) { bestDiff = diff; best = telemetry[i]; }
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = telemetry[i];
+      }
     }
     return best;
-  }, [currentFrame, trajectory, telemetry]);
+  }, [currentFrame, isUsingUploaded, trajectory, telemetry]);
 
   const currentAttitude = useMemo(() => {
     if (!trajectory) return null;
@@ -146,7 +188,10 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
         const mesh = child as THREE.Mesh;
         const mat = mesh.material;
         if (Array.isArray(mat)) {
-          mat.forEach((m) => { if ('color' in m) (m as THREE.MeshStandardMaterial).color.lerp(tint, 0.4); });
+          mat.forEach((m) => {
+            if ('color' in m)
+              (m as THREE.MeshStandardMaterial).color.lerp(tint, 0.4);
+          });
         } else if ('color' in mat) {
           (mat as THREE.MeshStandardMaterial).color.lerp(tint, 0.4);
         }
@@ -197,45 +242,79 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
   );
 
   // ── Build trajectory geometry ─────────────────────────────────────────────
-  const buildTrajectoryGeometry = useCallback((
-    scene: THREE.Scene,
-    traj: DroneAttitude[],
-    cX: number, cY: number, cZ: number, ext: number,
-  ) => {
-    if (trailLineRef.current) scene.remove(trailLineRef.current);
-    if (trailDotsRef.current) scene.remove(trailDotsRef.current);
+  const buildTrajectoryGeometry = useCallback(
+    (
+      scene: THREE.Scene,
+      traj: DroneAttitude[],
+      cX: number,
+      cY: number,
+      cZ: number,
+      ext: number,
+    ) => {
+      if (trailLineRef.current) scene.remove(trailLineRef.current);
+      if (trailDotsRef.current) scene.remove(trailDotsRef.current);
 
-    const positions: number[] = [];
-    const colors: number[] = [];
-    const color = new THREE.Color();
+      const positions: number[] = [];
+      const colors: number[] = [];
+      const color = new THREE.Color();
 
-    for (let i = 0; i < traj.length; i++) {
-      const pp = traj[i];
-      positions.push(pp.x - cX, pp.z - cZ, pp.y - cY);
-      const tt = i / (traj.length - 1);
-      color.setHSL(0.55 + tt * 0.15, 0.9, 0.55);
-      colors.push(color.r, color.g, color.b);
-    }
+      for (let i = 0; i < traj.length; i++) {
+        const pp = traj[i];
+        positions.push(pp.x - cX, pp.z - cZ, pp.y - cY);
+        const tt = i / (traj.length - 1);
+        color.setHSL(0.55 + tt * 0.15, 0.9, 0.55);
+        colors.push(color.r, color.g, color.b);
+      }
 
-    const lineGeom = new THREE.BufferGeometry();
-    lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    lineGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 }));
-    scene.add(line);
-    trailLineRef.current = line;
+      const lineGeom = new THREE.BufferGeometry();
+      lineGeom.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(positions, 3),
+      );
+      lineGeom.setAttribute(
+        'color',
+        new THREE.Float32BufferAttribute(colors, 3),
+      );
+      const line = new THREE.Line(
+        lineGeom,
+        new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 }),
+      );
+      scene.add(line);
+      trailLineRef.current = line;
 
-    const dotGeom = new THREE.BufferGeometry();
-    dotGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    dotGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const dotSize = Math.max(1.5, ext * 0.005);
-    const dots = new THREE.Points(dotGeom, new THREE.PointsMaterial({ vertexColors: true, size: dotSize, sizeAttenuation: true }));
-    scene.add(dots);
-    trailDotsRef.current = dots;
-  }, []);
+      const dotGeom = new THREE.BufferGeometry();
+      dotGeom.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(positions, 3),
+      );
+      dotGeom.setAttribute(
+        'color',
+        new THREE.Float32BufferAttribute(colors, 3),
+      );
+      const dotSize = Math.max(1.5, ext * 0.005);
+      const dots = new THREE.Points(
+        dotGeom,
+        new THREE.PointsMaterial({
+          vertexColors: true,
+          size: dotSize,
+          sizeAttenuation: true,
+        }),
+      );
+      scene.add(dots);
+      trailDotsRef.current = dots;
+    },
+    [],
+  );
 
   // ── Three.js scene setup ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!containerRef.current || !trajectory || trajectory.length === 0 || !bounds) return;
+    if (
+      !containerRef.current ||
+      !trajectory ||
+      trajectory.length === 0 ||
+      !bounds
+    )
+      return;
 
     const container = containerRef.current;
     const { centerX, centerY, centerZ, extent } = bounds;
@@ -244,7 +323,12 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
     scene.background = new THREE.Color(0x0a0f1e);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 50000);
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      container.clientWidth / container.clientHeight,
+      0.01,
+      50000,
+    );
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -255,19 +339,36 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(1, 2, 1).normalize().multiplyScalar(extent * 2);
+    dirLight.position
+      .set(1, 2, 1)
+      .normalize()
+      .multiplyScalar(extent * 2);
     scene.add(dirLight);
     const fillLight = new THREE.DirectionalLight(0x8899ff, 0.5);
-    fillLight.position.set(-1, 0.5, -1).normalize().multiplyScalar(extent * 2);
+    fillLight.position
+      .set(-1, 0.5, -1)
+      .normalize()
+      .multiplyScalar(extent * 2);
     scene.add(fillLight);
     scene.add(new THREE.HemisphereLight(0xb1e1ff, 0x283050, 0.6));
 
     const gridSize = Math.max(extent * 2, 200);
     scene.add(new THREE.GridHelper(gridSize, 40, 0x334466, 0x1a2744));
 
-    buildTrajectoryGeometry(scene, trajectory, centerX, centerY, centerZ, extent);
+    buildTrajectoryGeometry(
+      scene,
+      trajectory,
+      centerX,
+      centerY,
+      centerZ,
+      extent,
+    );
 
-    const startPos = new THREE.Vector3(trajectory[0].x - centerX, trajectory[0].z - centerZ, trajectory[0].y - centerY);
+    const startPos = new THREE.Vector3(
+      trajectory[0].x - centerX,
+      trajectory[0].z - centerZ,
+      trajectory[0].y - centerY,
+    );
     const endPos = new THREE.Vector3(
       trajectory[trajectory.length - 1].x - centerX,
       trajectory[trajectory.length - 1].z - centerZ,
@@ -275,10 +376,16 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
     );
 
     const markerGeo = new THREE.SphereGeometry(extent * 0.012, 16, 16);
-    const startMarker = new THREE.Mesh(markerGeo, new THREE.MeshPhongMaterial({ color: 0x22c55e, emissive: 0x166534 }));
+    const startMarker = new THREE.Mesh(
+      markerGeo,
+      new THREE.MeshPhongMaterial({ color: 0x22c55e, emissive: 0x166534 }),
+    );
     startMarker.position.copy(startPos);
     scene.add(startMarker);
-    const endMarker = new THREE.Mesh(markerGeo, new THREE.MeshPhongMaterial({ color: 0xef4444, emissive: 0x7f1d1d }));
+    const endMarker = new THREE.Mesh(
+      markerGeo,
+      new THREE.MeshPhongMaterial({ color: 0xef4444, emissive: 0x7f1d1d }),
+    );
     endMarker.position.copy(endPos);
     scene.add(endMarker);
 
@@ -317,12 +424,16 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
           const safeIdx = Math.max(0, Math.min(idx, trajectory.length - 1));
           const point = trajectory[safeIdx];
 
-          droneGroup.position.set(point.x - centerX, point.z - centerZ, point.y - centerY);
+          droneGroup.position.set(
+            point.x - centerX,
+            point.z - centerZ,
+            point.y - centerY,
+          );
 
           const rotMul = (droneGroup as any).__rotMul ?? 1;
-          const targetY = (point.yaw * Math.PI) / 180 * rotMul;
-          const targetX = -(point.pitch * Math.PI) / 180 * rotMul;
-          const targetZ = -(point.roll * Math.PI) / 180 * rotMul;
+          const targetY = ((point.yaw * Math.PI) / 180) * rotMul;
+          const targetX = (-(point.pitch * Math.PI) / 180) * rotMul;
+          const targetZ = (-(point.roll * Math.PI) / 180) * rotMul;
 
           const damp = (droneGroup as any).__damping ?? 0.15;
           const rot = currentRotRef.current;
@@ -344,8 +455,10 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
+      if (renderer.domElement.parentNode === container)
+        container.removeChild(renderer.domElement);
       renderer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -367,7 +480,14 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
       }
     }, 16);
     return () => clearInterval(interval);
-  }, [isPlaying, speed, trajectory, mods.speedMultiplier, mods.attitudeDamping, mods.rotationMultiplier]);
+  }, [
+    isPlaying,
+    speed,
+    trajectory,
+    mods.speedMultiplier,
+    mods.attitudeDamping,
+    mods.rotationMultiplier,
+  ]);
 
   const handleFrameChange = useCallback((val: number) => {
     frameRef.current = val;
@@ -378,7 +498,7 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
   // but just in case:
   if (!trajectory || trajectory.length === 0) {
     return (
-      <div className="flex h-[700px] items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-slate-400">
+      <div className="flex h-175 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-slate-400">
         Initializing flight viewer...
       </div>
     );
@@ -392,7 +512,11 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
       }`}
     >
       {/* 3D Canvas */}
-      <div className="w-full" style={{ height: isFullscreen ? '100vh' : '700px' }} ref={containerRef} />
+      <div
+        className="w-full"
+        style={{ height: isFullscreen ? '100vh' : '700px' }}
+        ref={containerRef}
+      />
 
       {/* Loading overlay */}
       {!modelLoaded && (
@@ -409,41 +533,106 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
         config={droneConfig}
         onChange={setDroneConfig}
         freeFlightConfig={freeFlightCfg}
-        onFreeFlightChange={setFreeFlightCfg}
-        hasTrajectory={hasUploaded}
+        onFreeFlightChange={handleFreeFlightChange}
+        hasTrajectory={isUsingUploaded}
       />
 
       {/* Telemetry Panel */}
       <div className="absolute top-4 right-4 z-20 w-64 rounded-xl border border-white/10 bg-slate-950/90 backdrop-blur-md p-3 shadow-xl">
         <h3 className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">
-          {hasUploaded ? 'Live Telemetry' : 'Simulation'}
+          {isUsingUploaded ? 'Live Telemetry' : 'Simulation'}
         </h3>
 
         {currentTelemetry ? (
           <div className="space-y-1.5 font-mono text-[11px]">
-            <CoordRow label="LAT" value={currentTelemetry.latitude.toFixed(8)} unit="°" accent="text-emerald-400" />
-            <CoordRow label="LON" value={currentTelemetry.longitude.toFixed(8)} unit="°" accent="text-emerald-400" />
-            <CoordRow label="ALT" value={currentTelemetry.altitude_m.toFixed(4)} unit="m" accent="text-cyan-400" />
+            <CoordRow
+              label="LAT"
+              value={currentTelemetry.latitude.toFixed(8)}
+              unit="°"
+              accent="text-emerald-400"
+            />
+            <CoordRow
+              label="LON"
+              value={currentTelemetry.longitude.toFixed(8)}
+              unit="°"
+              accent="text-emerald-400"
+            />
+            <CoordRow
+              label="ALT"
+              value={currentTelemetry.altitude_m.toFixed(4)}
+              unit="m"
+              accent="text-cyan-400"
+            />
             <div className="my-1.5 h-px bg-white/10" />
-            <CoordRow label="SPD" value={(currentTelemetry.speed_mps ?? 0).toFixed(3)} unit="m/s" accent="text-purple-400" />
+            <CoordRow
+              label="SPD"
+              value={(currentTelemetry.speed_mps ?? 0).toFixed(3)}
+              unit="m/s"
+              accent="text-purple-400"
+            />
             {currentAttitude && (
               <>
                 <div className="my-1.5 h-px bg-white/10" />
-                <CoordRow label="ROLL" value={currentAttitude.roll.toFixed(3)} unit="°" accent="text-cyan-400" />
-                <CoordRow label="PITCH" value={currentAttitude.pitch.toFixed(3)} unit="°" accent="text-cyan-400" />
-                <CoordRow label="YAW" value={currentAttitude.yaw.toFixed(3)} unit="°" accent="text-cyan-400" />
+                <CoordRow
+                  label="ROLL"
+                  value={currentAttitude.roll.toFixed(3)}
+                  unit="°"
+                  accent="text-cyan-400"
+                />
+                <CoordRow
+                  label="PITCH"
+                  value={currentAttitude.pitch.toFixed(3)}
+                  unit="°"
+                  accent="text-cyan-400"
+                />
+                <CoordRow
+                  label="YAW"
+                  value={currentAttitude.yaw.toFixed(3)}
+                  unit="°"
+                  accent="text-cyan-400"
+                />
               </>
             )}
           </div>
         ) : currentAttitude ? (
           <div className="space-y-1.5 font-mono text-[11px]">
-            <CoordRow label="X" value={currentAttitude.x.toFixed(2)} unit="m" accent="text-emerald-400" />
-            <CoordRow label="Y" value={currentAttitude.y.toFixed(2)} unit="m" accent="text-emerald-400" />
-            <CoordRow label="ALT" value={currentAttitude.z.toFixed(2)} unit="m" accent="text-cyan-400" />
+            <CoordRow
+              label="X"
+              value={currentAttitude.x.toFixed(2)}
+              unit="m"
+              accent="text-emerald-400"
+            />
+            <CoordRow
+              label="Y"
+              value={currentAttitude.y.toFixed(2)}
+              unit="m"
+              accent="text-emerald-400"
+            />
+            <CoordRow
+              label="ALT"
+              value={currentAttitude.z.toFixed(2)}
+              unit="m"
+              accent="text-cyan-400"
+            />
             <div className="my-1.5 h-px bg-white/10" />
-            <CoordRow label="ROLL" value={currentAttitude.roll.toFixed(3)} unit="°" accent="text-cyan-400" />
-            <CoordRow label="PITCH" value={currentAttitude.pitch.toFixed(3)} unit="°" accent="text-cyan-400" />
-            <CoordRow label="YAW" value={currentAttitude.yaw.toFixed(3)} unit="°" accent="text-cyan-400" />
+            <CoordRow
+              label="ROLL"
+              value={currentAttitude.roll.toFixed(3)}
+              unit="°"
+              accent="text-cyan-400"
+            />
+            <CoordRow
+              label="PITCH"
+              value={currentAttitude.pitch.toFixed(3)}
+              unit="°"
+              accent="text-cyan-400"
+            />
+            <CoordRow
+              label="YAW"
+              value={currentAttitude.yaw.toFixed(3)}
+              unit="°"
+              accent="text-cyan-400"
+            />
           </div>
         ) : (
           <p className="text-[11px] text-slate-500">Waiting for data...</p>
@@ -452,8 +641,33 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
 
       {/* Frame counter + fullscreen */}
       <div className="absolute top-4 left-88 z-20 flex items-center gap-2">
+        {hasUploaded && (
+          <div className="rounded-lg border border-white/10 bg-slate-950/90 backdrop-blur-md p-1 flex gap-1">
+            <button
+              onClick={() => setForceSimulation(false)}
+              className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+                isUsingUploaded
+                  ? 'bg-cyan-500/20 text-cyan-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              BIN Replay
+            </button>
+            <button
+              onClick={() => setForceSimulation(true)}
+              className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+                !isUsingUploaded
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Simulator
+            </button>
+          </div>
+        )}
         <div className="rounded-lg border border-white/10 bg-slate-950/90 backdrop-blur-md px-3 py-2 text-xs text-slate-300">
-          {hasUploaded ? 'Frame' : 'Sim'} {Math.floor(currentFrame)} / {trajectory.length - 1}
+          {isUsingUploaded ? 'Frame' : 'Sim'} {Math.floor(currentFrame)} /{' '}
+          {trajectory.length - 1}
         </div>
         <button
           onClick={toggleFullscreen}
@@ -461,12 +675,30 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         >
           {isFullscreen ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3" />
+            </svg>
           ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" />
+            </svg>
           )}
         </button>
-        {!hasUploaded && (
+        {!isUsingUploaded && (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/90 backdrop-blur-md px-3 py-2 text-xs text-emerald-300 font-medium">
             Free Flight Mode
           </div>
@@ -490,9 +722,24 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
             className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-500 transition"
           >
             {isPlaying ? (
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="currentColor"
+              >
+                <rect x="2" y="1" width="3.5" height="12" rx="1" />
+                <rect x="8.5" y="1" width="3.5" height="12" rx="1" />
+              </svg>
             ) : (
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5v11l9-5.5z"/></svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="currentColor"
+              >
+                <path d="M3 1.5v11l9-5.5z" />
+              </svg>
             )}
           </button>
 
@@ -517,7 +764,9 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
               onChange={(e) => setSpeed(parseFloat(e.target.value))}
               className="w-20 h-1.5 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
             />
-            <span className="w-12 text-right tabular-nums text-white">{speed.toFixed(1)}x</span>
+            <span className="w-12 text-right tabular-nums text-white">
+              {speed.toFixed(1)}x
+            </span>
           </div>
         </div>
       </div>
@@ -527,11 +776,23 @@ export function DroneViewer({ trajectory: uploadedTrajectory, telemetry }: Drone
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function CoordRow({ label, value, unit, accent }: { label: string; value: string; unit: string; accent: string }) {
+function CoordRow({
+  label,
+  value,
+  unit,
+  accent,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  accent: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-slate-500 w-12 shrink-0">{label}</span>
-      <span className={`${accent} tabular-nums flex-1 text-right`}>{value}</span>
+      <span className={`${accent} tabular-nums flex-1 text-right`}>
+        {value}
+      </span>
       <span className="text-slate-600 w-8 text-right">{unit}</span>
     </div>
   );
