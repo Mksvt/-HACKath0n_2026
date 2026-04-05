@@ -12,3 +12,5 @@ class AISummaryResponse(BaseModel):
     flight_id: str
     summary: str
     metrics: FlightMetrics
+
+#test
