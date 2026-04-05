@@ -14,3 +14,4 @@ class AISummaryResponse(BaseModel):
     metrics: FlightMetrics
 
 #test
+#hello world
