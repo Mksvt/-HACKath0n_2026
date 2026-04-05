@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { CheckCircle2 } from 'lucide-react';
 
 import {
   fetchAISummary,
@@ -41,18 +42,24 @@ export function UploadPanel() {
       console.log('Upload response:', upload);
       setFlightId(upload.flight_id);
 
-      const [metrics, telemetryRes, trajectoryRes, trajectoryWithAttitudeRes, analysisRes, aiRes] =
-        await Promise.all([
-          fetchMetrics(upload.flight_id),
-          fetchTelemetry(upload.flight_id),
-          fetchTrajectory(upload.flight_id),
-          fetchTrajectoryWithAttitude(upload.flight_id),
-          fetchAnalysis(upload.flight_id),
-          fetchAISummary(
-            upload.flight_id,
-            'Provide a short human-friendly flight summary.',
-          ),
-        ]);
+      const [
+        metrics,
+        telemetryRes,
+        trajectoryRes,
+        trajectoryWithAttitudeRes,
+        analysisRes,
+        aiRes,
+      ] = await Promise.all([
+        fetchMetrics(upload.flight_id),
+        fetchTelemetry(upload.flight_id),
+        fetchTrajectory(upload.flight_id),
+        fetchTrajectoryWithAttitude(upload.flight_id),
+        fetchAnalysis(upload.flight_id),
+        fetchAISummary(
+          upload.flight_id,
+          'Provide a short human-friendly flight summary.',
+        ),
+      ]);
 
       setMetrics(metrics);
       setTelemetry(telemetryRes.telemetry);
@@ -70,13 +77,17 @@ export function UploadPanel() {
   });
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 shadow-xl">
+    <div className="rounded-3xl border border-white/10 bg-linear-to-br from-slate-900/85 via-slate-900/75 to-slate-950/80 p-6 shadow-2xl backdrop-blur md:p-7">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-300">Ardupilot .BIN upload</p>
-          <h2 className="text-xl font-semibold">Telemetry ingestion (GPS + IMU + ATT)</h2>
+          <p className="text-sm font-medium text-cyan-300/90">
+            Крок 1: Завантаження BIN-логу
+          </p>
+          <h2 className="text-xl font-semibold">
+            Імпорт телеметрії (GPS + IMU + ATT)
+          </h2>
         </div>
-        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium hover:bg-slate-700">
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-800/80 px-4 py-2 text-sm font-medium transition hover:border-cyan-300/40 hover:bg-slate-700">
           <input
             type="file"
             accept=".bin,.BIN"
@@ -94,21 +105,27 @@ export function UploadPanel() {
         <button
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !selectedFile}
-          className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700"
+          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-900/30 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
         >
-          {mutation.isPending ? 'Processing...' : 'Upload & analyze'}
+          {mutation.isPending ? 'Обробка...' : 'Завантажити й проаналізувати'}
         </button>
         {mutation.isSuccess && (
-          <span className="text-sm text-emerald-400">Processed ✓</span>
+          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-400">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Готово</span>
+          </span>
         )}
         {error && <span className="text-sm text-rose-400">{error}</span>}
       </div>
       <p className="mt-3 text-xs text-slate-400">
-        We parse GPS, IMU, and ATT (attitude/orientation) data, compute metrics, 
+        We parse GPS, IMU, and ATT (attitude/orientation) data, compute metrics,
         convert WGS-84 to ENU (east/north/up) using the first valid GPS point.
         The 3D drone visualization uses Three.js with interpolated position and
-        attitude for smooth animation. Distance and integration use Haversine per
-        the challenge requirements.
+        attitude for smooth animation. Distance and integration use Haversine
+        per the challenge requirements.
+      </p>
+      <p className="mt-2 text-xs text-cyan-300/80">
+        Після успішної обробки карта польоту (Cesium) відкривається автоматично.
       </p>
     </div>
   );

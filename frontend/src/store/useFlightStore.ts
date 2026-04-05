@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import {
   AnalysisResponse,
@@ -25,9 +26,22 @@ type FlightState = {
   setOrigin: (origin?: { lat: number; lon: number; alt: number }) => void;
   setAnalysis: (analysis?: AnalysisResponse) => void;
   setAiSummary: (text?: string) => void;
+  resetFlight: () => void;
 };
 
-export const useFlightStore = create<FlightState>((set) => ({
+type FlightDataState = Pick<
+  FlightState,
+  | 'flightId'
+  | 'metrics'
+  | 'telemetry'
+  | 'trajectory'
+  | 'trajectoryWithAttitude'
+  | 'origin'
+  | 'analysis'
+  | 'aiSummary'
+>;
+
+const initialFlightData: FlightDataState = {
   flightId: undefined,
   metrics: undefined,
   telemetry: undefined,
@@ -36,12 +50,29 @@ export const useFlightStore = create<FlightState>((set) => ({
   origin: undefined,
   analysis: undefined,
   aiSummary: undefined,
-  setFlightId: (flightId) => set({ flightId }),
-  setMetrics: (metrics) => set({ metrics }),
-  setTelemetry: (telemetry) => set({ telemetry }),
-  setTrajectory: (trajectory) => set({ trajectory }),
-  setTrajectoryWithAttitude: (trajectoryWithAttitude) => set({ trajectoryWithAttitude }),
-  setOrigin: (origin) => set({ origin }),
-  setAnalysis: (analysis) => set({ analysis }),
-  setAiSummary: (aiSummary) => set({ aiSummary }),
-}));
+};
+
+export const useFlightStore = create<FlightState>()(
+  persist(
+    (set) => ({
+      ...initialFlightData,
+      setFlightId: (flightId) => set({ flightId }),
+      setMetrics: (metrics) => set({ metrics }),
+      setTelemetry: (telemetry) => set({ telemetry }),
+      setTrajectory: (trajectory) => set({ trajectory }),
+      setTrajectoryWithAttitude: (trajectoryWithAttitude) =>
+        set({ trajectoryWithAttitude }),
+      setOrigin: (origin) => set({ origin }),
+      setAnalysis: (analysis) => set({ analysis }),
+      setAiSummary: (aiSummary) => set({ aiSummary }),
+      resetFlight: () => set(initialFlightData),
+    }),
+    {
+      name: 'flight-store-v1',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        flightId: state.flightId,
+      }),
+    },
+  ),
+);

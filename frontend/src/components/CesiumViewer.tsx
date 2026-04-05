@@ -15,7 +15,13 @@ interface Props {
   colorMode?: 'speed' | 'time';
 }
 
-export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, origin, colorMode = 'speed' }: Props) {
+export function CesiumViewer({
+  trajectory,
+  trajectoryWithAttitude,
+  telemetry,
+  origin,
+  colorMode = 'speed',
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const [altScale, setAltScale] = useState(5);
@@ -29,9 +35,11 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
   const cesiumRef = useRef<any>(null);
   const enuFrameRef = useRef<any>(null);
   const positionsRef = useRef<any[]>([]);
+  const hasTrajectoryData = Boolean(trajectory?.length && origin);
 
   const currentTelemetry = useMemo(() => {
-    if (!trajectoryWithAttitude || !telemetry || telemetry.length === 0) return null;
+    if (!trajectoryWithAttitude || !telemetry || telemetry.length === 0)
+      return null;
     const frameIdx = Math.floor(currentFrame);
     if (frameIdx < 0 || frameIdx >= trajectoryWithAttitude.length) return null;
     const t = trajectoryWithAttitude[frameIdx].time;
@@ -55,7 +63,16 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
   }, [currentFrame, trajectoryWithAttitude]);
 
   useEffect(() => {
+    if (!hasTrajectoryData) {
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     if (!containerRef.current || !trajectory?.length || !origin) return;
+
+    setIsLoading(true);
+    setError(null);
 
     let viewer: any;
     let ro: ResizeObserver;
@@ -77,9 +94,13 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
         };
         buildModuleUrl.setBaseUrl?.(CESIUM_BASE_URL);
 
-        const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2MmU3ZTFkYy00ODk1LTQwOGMtYjc4MS05MGIxYjQ0YTlhNGYiLCJpZCI6NDEyMzUyLCJpYXQiOjE3NzUwNDY4ODl9.TNm4F4wo2bhp4O4YZ9NX_wfiet3lUlsdX5GQ0tLx5Aw';
+        const token =
+          process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ??
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2MmU3ZTFkYy00ODk1LTQwOGMtYjc4MS05MGIxYjQ0YTlhNGYiLCJpZCI6NDEyMzUyLCJpYXQiOjE3NzUwNDY4ODl9.TNm4F4wo2bhp4O4YZ9NX_wfiet3lUlsdX5GQ0tLx5Aw';
         if (!token) {
-          console.warn('[CesiumViewer] NEXT_PUBLIC_CESIUM_ION_TOKEN is not set.');
+          console.warn(
+            '[CesiumViewer] NEXT_PUBLIC_CESIUM_ION_TOKEN is not set.',
+          );
         }
         Cesium.Ion.defaultAccessToken = token;
 
@@ -104,8 +125,10 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
         viewerRef.current = viewer;
         forceCanvasFill(viewer);
 
-        viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1021');
-        viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1a1f2e');
+        viewer.scene.backgroundColor =
+          Cesium.Color.fromCssColorString('#0b1021');
+        viewer.scene.globe.baseColor =
+          Cesium.Color.fromCssColorString('#1a1f2e');
         if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
         if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
 
@@ -123,15 +146,29 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
         });
         ro.observe(containerRef.current as HTMLElement);
 
-        const { positions, enuFrame } = renderTrajectory(Cesium, viewer, trajectory, origin, altScale);
+        const { positions, enuFrame } = renderTrajectory(
+          Cesium,
+          viewer,
+          trajectory,
+          origin,
+          altScale,
+        );
         positionsRef.current = positions;
         enuFrameRef.current = enuFrame;
 
         // Add drone model entity
-        if (trajectoryWithAttitude && trajectoryWithAttitude.length > 0 && positions.length > 0) {
+        if (
+          trajectoryWithAttitude &&
+          trajectoryWithAttitude.length > 0 &&
+          positions.length > 0
+        ) {
           const droneEntity = viewer.entities.add({
             position: positions[0],
-            orientation: computeOrientation(Cesium, enuFrame, trajectoryWithAttitude[0]),
+            orientation: computeOrientation(
+              Cesium,
+              enuFrame,
+              trajectoryWithAttitude[0],
+            ),
             model: {
               uri: '/models/drone/Drone.glb',
               minimumPixelSize: 64,
@@ -176,8 +213,8 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
         droneEntityRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trajectory, origin, altScale]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasTrajectoryData, trajectory, origin, altScale]);
 
   // Animation loop for the drone
   useEffect(() => {
@@ -185,7 +222,8 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
     const interval = setInterval(() => {
       if (!isPlaying) return;
       frameRef.current += speed * 0.5;
-      if (frameRef.current >= trajectoryWithAttitude.length) frameRef.current = 0;
+      if (frameRef.current >= trajectoryWithAttitude.length)
+        frameRef.current = 0;
       setCurrentFrame(frameRef.current);
     }, 16);
     return () => clearInterval(interval);
@@ -197,27 +235,32 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
     const Cesium = cesiumRef.current;
     const enuFrame = enuFrameRef.current;
     const viewer = viewerRef.current;
-    if (!entity || !Cesium || !enuFrame || !viewer || !trajectoryWithAttitude) return;
+    if (!entity || !Cesium || !enuFrame || !viewer || !trajectoryWithAttitude)
+      return;
 
     const idx = Math.floor(currentFrame);
-    const safeIdx = Math.max(0, Math.min(idx, trajectoryWithAttitude.length - 1));
+    const safeIdx = Math.max(
+      0,
+      Math.min(idx, trajectoryWithAttitude.length - 1),
+    );
     const point = trajectoryWithAttitude[safeIdx];
 
     const local = new Cesium.Cartesian3(point.x, point.y, point.z * altScale);
-    const ecef = Cesium.Matrix4.multiplyByPoint(enuFrame, local, new Cesium.Cartesian3());
+    const ecef = Cesium.Matrix4.multiplyByPoint(
+      enuFrame,
+      local,
+      new Cesium.Cartesian3(),
+    );
     entity.position = ecef;
     entity.orientation = computeOrientation(Cesium, enuFrame, point);
 
     viewer.scene.requestRender();
   }, [currentFrame, trajectoryWithAttitude, altScale]);
 
-  const handleFrameChange = useCallback(
-    (val: number) => {
-      frameRef.current = val;
-      setCurrentFrame(val);
-    },
-    [],
-  );
+  const handleFrameChange = useCallback((val: number) => {
+    frameRef.current = val;
+    setCurrentFrame(val);
+  }, []);
 
   const totalFrames = trajectoryWithAttitude?.length ?? trajectory?.length ?? 0;
 
@@ -226,40 +269,72 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900/80 border border-white/10 rounded-t-2xl">
         <span className="text-xs text-slate-400 font-medium">
-          3D ENU trajectory — {trajectory?.length ?? 0} points
+          {hasTrajectoryData
+            ? `3D ENU trajectory — ${trajectory?.length ?? 0} points`
+            : 'Карта польоту очікує BIN-лог'}
         </span>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-slate-400">
-            Altitude ×
-            <select
-              value={altScale}
-              onChange={(e) => setAltScale(Number(e.target.value))}
-              className="bg-slate-800 border border-white/10 text-white text-xs rounded px-2 py-1"
-            >
-              <option value={1}>1× (real)</option>
-              <option value={3}>3×</option>
-              <option value={5}>5×</option>
-              <option value={10}>10×</option>
-              <option value={20}>20×</option>
-            </select>
-          </label>
-          <span className="text-xs text-slate-500">Color by {colorMode}</span>
+          {hasTrajectoryData && (
+            <>
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                Altitude ×
+                <select
+                  value={altScale}
+                  onChange={(e) => setAltScale(Number(e.target.value))}
+                  className="bg-slate-800 border border-white/10 text-white text-xs rounded px-2 py-1"
+                >
+                  <option value={1}>1× (real)</option>
+                  <option value={3}>3×</option>
+                  <option value={5}>5×</option>
+                  <option value={10}>10×</option>
+                  <option value={20}>20×</option>
+                </select>
+              </label>
+              <span className="text-xs text-slate-500">
+                Color by {colorMode}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
       {/* Cesium wrapper */}
       <div
-        style={{ width: '100%', height: '60vh', minHeight: 480, position: 'relative' }}
+        style={{
+          width: '100%',
+          height: '60vh',
+          minHeight: 480,
+          position: 'relative',
+        }}
         className="border-x border-b border-white/10 rounded-b-2xl overflow-hidden bg-[#0b1021]"
       >
         <div
           key={altScale}
           ref={containerRef}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+          }}
         />
 
+        {!hasTrajectoryData && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b1021]/85">
+            <div className="max-w-md rounded-2xl border border-white/10 bg-slate-950/80 px-6 py-5 text-center backdrop-blur">
+              <p className="text-sm font-semibold text-cyan-300">
+                Немає траєкторії для відтворення
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Завантаж BIN-файл у верхній панелі, і карта автоматично
+                відкриється з маршрутом польоту.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Loading overlay */}
-        {isLoading && !error && (
+        {hasTrajectoryData && isLoading && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b1021]/80 z-10 pointer-events-none">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -272,7 +347,9 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b1021]/90 z-10">
             <div className="flex flex-col items-center gap-2 max-w-sm text-center px-6">
-              <span className="text-red-400 text-sm font-medium">Viewer failed to load</span>
+              <span className="text-red-400 text-sm font-medium">
+                Viewer failed to load
+              </span>
               <span className="text-slate-500 text-xs">{error}</span>
             </div>
           </div>
@@ -286,26 +363,81 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
             </h3>
             {currentTelemetry ? (
               <div className="space-y-2 font-mono text-xs">
-                <CoordRow label="LAT" value={currentTelemetry.latitude.toFixed(8)} unit="°" accent="text-emerald-400" />
-                <CoordRow label="LON" value={currentTelemetry.longitude.toFixed(8)} unit="°" accent="text-emerald-400" />
-                <CoordRow label="ALT" value={currentTelemetry.altitude_m.toFixed(4)} unit="m" accent="text-cyan-400" />
+                <CoordRow
+                  label="LAT"
+                  value={currentTelemetry.latitude.toFixed(8)}
+                  unit="°"
+                  accent="text-emerald-400"
+                />
+                <CoordRow
+                  label="LON"
+                  value={currentTelemetry.longitude.toFixed(8)}
+                  unit="°"
+                  accent="text-emerald-400"
+                />
+                <CoordRow
+                  label="ALT"
+                  value={currentTelemetry.altitude_m.toFixed(4)}
+                  unit="m"
+                  accent="text-cyan-400"
+                />
                 <div className="my-2 h-px bg-white/10" />
-                <CoordRow label="SPD" value={(currentTelemetry.speed_mps ?? 0).toFixed(3)} unit="m/s" accent="text-purple-400" />
+                <CoordRow
+                  label="SPD"
+                  value={(currentTelemetry.speed_mps ?? 0).toFixed(3)}
+                  unit="m/s"
+                  accent="text-purple-400"
+                />
                 {currentAttitude && (
                   <>
                     <div className="my-2 h-px bg-white/10" />
-                    <CoordRow label="ROLL" value={currentAttitude.roll.toFixed(3)} unit="°" accent="text-cyan-400" />
-                    <CoordRow label="PITCH" value={currentAttitude.pitch.toFixed(3)} unit="°" accent="text-cyan-400" />
-                    <CoordRow label="YAW" value={currentAttitude.yaw.toFixed(3)} unit="°" accent="text-cyan-400" />
-                    <CoordRow label="TIME" value={currentAttitude.time.toFixed(2)} unit="s" accent="text-slate-400" />
+                    <CoordRow
+                      label="ROLL"
+                      value={currentAttitude.roll.toFixed(3)}
+                      unit="°"
+                      accent="text-cyan-400"
+                    />
+                    <CoordRow
+                      label="PITCH"
+                      value={currentAttitude.pitch.toFixed(3)}
+                      unit="°"
+                      accent="text-cyan-400"
+                    />
+                    <CoordRow
+                      label="YAW"
+                      value={currentAttitude.yaw.toFixed(3)}
+                      unit="°"
+                      accent="text-cyan-400"
+                    />
+                    <CoordRow
+                      label="TIME"
+                      value={currentAttitude.time.toFixed(2)}
+                      unit="s"
+                      accent="text-slate-400"
+                    />
                   </>
                 )}
               </div>
             ) : currentAttitude ? (
               <div className="space-y-2 font-mono text-xs">
-                <CoordRow label="X (E)" value={currentAttitude.x.toFixed(4)} unit="m" accent="text-amber-400" />
-                <CoordRow label="Y (N)" value={currentAttitude.y.toFixed(4)} unit="m" accent="text-amber-400" />
-                <CoordRow label="Z (U)" value={currentAttitude.z.toFixed(4)} unit="m" accent="text-amber-400" />
+                <CoordRow
+                  label="X (E)"
+                  value={currentAttitude.x.toFixed(4)}
+                  unit="m"
+                  accent="text-amber-400"
+                />
+                <CoordRow
+                  label="Y (N)"
+                  value={currentAttitude.y.toFixed(4)}
+                  unit="m"
+                  accent="text-amber-400"
+                />
+                <CoordRow
+                  label="Z (U)"
+                  value={currentAttitude.z.toFixed(4)}
+                  unit="m"
+                  accent="text-amber-400"
+                />
               </div>
             ) : null}
           </div>
@@ -320,7 +452,7 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
       </div>
 
       {/* Playback controls */}
-      {totalFrames > 0 && (
+      {hasTrajectoryData && totalFrames > 0 && (
         <div className="border-x border-b border-white/10 bg-slate-950/90 backdrop-blur-md px-5 py-3 rounded-b-2xl -mt-px">
           <div className="flex items-center gap-4">
             <button
@@ -328,9 +460,24 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
               className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-500 transition"
             >
               {isPlaying ? (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="currentColor"
+                >
+                  <rect x="2" y="1" width="3.5" height="12" rx="1" />
+                  <rect x="8.5" y="1" width="3.5" height="12" rx="1" />
+                </svg>
               ) : (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5v11l9-5.5z"/></svg>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="currentColor"
+                >
+                  <path d="M3 1.5v11l9-5.5z" />
+                </svg>
               )}
             </button>
 
@@ -355,7 +502,9 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
                 onChange={(e) => setSpeed(parseFloat(e.target.value))}
                 className="w-20 h-1.5 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
               />
-              <span className="w-10 text-right tabular-nums text-white">{speed.toFixed(1)}x</span>
+              <span className="w-10 text-right tabular-nums text-white">
+                {speed.toFixed(1)}x
+              </span>
             </div>
           </div>
         </div>
@@ -366,11 +515,23 @@ export function CesiumViewer({ trajectory, trajectoryWithAttitude, telemetry, or
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function CoordRow({ label, value, unit, accent }: { label: string; value: string; unit: string; accent: string }) {
+function CoordRow({
+  label,
+  value,
+  unit,
+  accent,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  accent: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-slate-500 w-12 shrink-0">{label}</span>
-      <span className={`${accent} tabular-nums flex-1 text-right`}>{value}</span>
+      <span className={`${accent} tabular-nums flex-1 text-right`}>
+        {value}
+      </span>
       <span className="text-slate-600 w-8 text-right">{unit}</span>
     </div>
   );
@@ -386,16 +547,24 @@ function computeOrientation(Cesium: any, enuFrame: any, point: DroneAttitude) {
   const rollRad = Cesium.Math.toRadians(-point.roll);
 
   const hpr = new Cesium.HeadingPitchRoll(headingRad, pitchRad, rollRad);
-  const origin = Cesium.Matrix4.getTranslation(enuFrame, new Cesium.Cartesian3());
+  const origin = Cesium.Matrix4.getTranslation(
+    enuFrame,
+    new Cesium.Cartesian3(),
+  );
   return Cesium.Transforms.headingPitchRollQuaternion(origin, hpr);
 }
 
-function waitForSize(el: HTMLElement, maxWaitMs = 5000, intervalMs = 50): Promise<void> {
+function waitForSize(
+  el: HTMLElement,
+  maxWaitMs = 5000,
+  intervalMs = 50,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const check = () => {
       if (el.clientWidth > 0 && el.clientHeight > 0) resolve();
-      else if (Date.now() - start > maxWaitMs) reject(new Error('Container never gained size'));
+      else if (Date.now() - start > maxWaitMs)
+        reject(new Error('Container never gained size'));
       else setTimeout(check, intervalMs);
     };
     check();
@@ -424,18 +593,30 @@ function renderTrajectory(
 
   if (!trajectory.length) return { positions: [], enuFrame: null };
 
-  const originCartesian = Cesium.Cartesian3.fromDegrees(origin.lon, origin.lat, origin.alt);
+  const originCartesian = Cesium.Cartesian3.fromDegrees(
+    origin.lon,
+    origin.lat,
+    origin.alt,
+  );
   const enuFrame = Cesium.Transforms.eastNorthUpToFixedFrame(originCartesian);
 
   const toEcef = (p: TrajectoryPoint): any => {
     const local = new Cesium.Cartesian3(p.x, p.y, p.z * altScale);
-    return Cesium.Matrix4.multiplyByPoint(enuFrame, local, new Cesium.Cartesian3());
+    return Cesium.Matrix4.multiplyByPoint(
+      enuFrame,
+      local,
+      new Cesium.Cartesian3(),
+    );
   };
 
   const positions = trajectory.map(toEcef);
   const groundPositions = trajectory.map((p) => {
     const local = new Cesium.Cartesian3(p.x, p.y, 0);
-    return Cesium.Matrix4.multiplyByPoint(enuFrame, local, new Cesium.Cartesian3());
+    return Cesium.Matrix4.multiplyByPoint(
+      enuFrame,
+      local,
+      new Cesium.Cartesian3(),
+    );
   });
 
   const colors = trajectory.map((p) =>
@@ -484,7 +665,10 @@ function renderTrajectory(
             positions: [positions[i], groundPositions[i]],
             width: 1,
             vertexFormat: Cesium.PolylineColorAppearance.VERTEX_FORMAT,
-            colors: [new Cesium.Color(1, 1, 1, 0.15), new Cesium.Color(1, 1, 1, 0.05)],
+            colors: [
+              new Cesium.Color(1, 1, 1, 0.15),
+              new Cesium.Color(1, 1, 1, 0.05),
+            ],
             colorsPerVertex: true,
           }),
         }),

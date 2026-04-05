@@ -123,18 +123,6 @@ export const CATEGORY_LABELS: Record<PartCategory, string> = {
   payload: 'Payload',
 };
 
-export const CATEGORY_ICONS: Record<PartCategory, string> = {
-  frame: '\u2B1B',
-  motors: '\u2699\uFE0F',
-  propellers: '\uD83C\uDF00',
-  esc: '\u26A1',
-  battery: '\uD83D\uDD0B',
-  flightController: '\uD83E\uDDE0',
-  gps: '\uD83D\uDCE1',
-  camera: '\uD83D\uDCF7',
-  payload: '\uD83D\uDCE6',
-};
-
 export const DEFAULT_CONFIG: DroneConfig = {
   frame: frames[2],
   motors: motors[2],

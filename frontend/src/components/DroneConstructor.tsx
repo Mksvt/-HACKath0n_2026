@@ -1,11 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { DroneConfig, DronePart, PartCategory, FlightPattern, FreeFlightConfig } from '@/types/api';
+import {
+  Battery,
+  Camera,
+  Cog,
+  Cpu,
+  Package,
+  Satellite,
+  Square,
+  Wind,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+import {
+  DroneConfig,
+  DronePart,
+  PartCategory,
+  FlightPattern,
+  FreeFlightConfig,
+} from '@/types/api';
 import {
   PARTS_CATALOG,
   CATEGORY_LABELS,
-  CATEGORY_ICONS,
   ALL_CATEGORIES,
   computeModifiers,
   DroneModifiers,
@@ -29,9 +46,23 @@ const PATTERN_LABELS: Record<FlightPattern, string> = {
   helix: 'Helix',
 };
 
+const CATEGORY_ICON_COMPONENTS: Record<PartCategory, LucideIcon> = {
+  frame: Square,
+  motors: Cog,
+  propellers: Wind,
+  esc: Zap,
+  battery: Battery,
+  flightController: Cpu,
+  gps: Satellite,
+  camera: Camera,
+  payload: Package,
+};
+
 export function DroneConstructor({
-  config, onChange,
-  freeFlightConfig, onFreeFlightChange,
+  config,
+  onChange,
+  freeFlightConfig,
+  onFreeFlightChange,
   hasTrajectory,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
@@ -50,7 +81,14 @@ export function DroneConstructor({
         className="absolute top-4 left-4 z-30 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-slate-950/90 backdrop-blur-md text-white hover:bg-slate-800 transition shadow-lg"
         title="Open Constructor"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
         </svg>
       </button>
@@ -79,7 +117,9 @@ export function DroneConstructor({
         <button
           onClick={() => setTab('parts')}
           className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider transition ${
-            tab === 'parts' ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5' : 'text-slate-500 hover:text-slate-300'
+            tab === 'parts'
+              ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
           Parts
@@ -87,10 +127,13 @@ export function DroneConstructor({
         <button
           onClick={() => setTab('flight')}
           className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider transition ${
-            tab === 'flight' ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/5' : 'text-slate-500 hover:text-slate-300'
+            tab === 'flight'
+              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/5'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
-          Flight {!hasTrajectory && <span className="text-yellow-400 ml-1">*</span>}
+          Flight{' '}
+          {!hasTrajectory && <span className="text-yellow-400 ml-1">*</span>}
         </button>
       </div>
 
@@ -98,21 +141,29 @@ export function DroneConstructor({
         <>
           {/* Category Tabs - scrollable row */}
           <div className="flex overflow-x-auto border-b border-white/10 scrollbar-none">
-            {ALL_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`shrink-0 px-3 py-2.5 text-center text-xs font-medium transition ${
-                  activeCategory === cat
-                    ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-                title={CATEGORY_LABELS[cat]}
-              >
-                <div className="text-base leading-none">{CATEGORY_ICONS[cat]}</div>
-                <div className="mt-1 text-[10px] leading-none whitespace-nowrap">{CATEGORY_LABELS[cat]}</div>
-              </button>
-            ))}
+            {ALL_CATEGORIES.map((cat) => {
+              const CategoryIcon = CATEGORY_ICON_COMPONENTS[cat];
+
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`shrink-0 px-3 py-2.5 text-center text-xs font-medium transition ${
+                    activeCategory === cat
+                      ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                  title={CATEGORY_LABELS[cat]}
+                >
+                  <div className="flex items-center justify-center leading-none">
+                    <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div className="mt-1 text-[10px] leading-none whitespace-nowrap">
+                    {CATEGORY_LABELS[cat]}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {/* Parts List */}
@@ -136,18 +187,36 @@ export function DroneConstructor({
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className={`text-sm font-semibold ${isSelected ? 'text-blue-300' : 'text-slate-200'}`}>
+                        <span
+                          className={`text-sm font-semibold ${isSelected ? 'text-blue-300' : 'text-slate-200'}`}
+                        >
                           {part.name}
                         </span>
-                        <span className="text-[10px] text-slate-500 tabular-nums">{part.weight_g}g</span>
+                        <span className="text-[10px] text-slate-500 tabular-nums">
+                          {part.weight_g}g
+                        </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug truncate">{part.description}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug truncate">
+                        {part.description}
+                      </p>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-2.5 flex-wrap">
-                    <StatPill label="SPD" value={part.speedFactor} sel={isSelected} />
-                    <StatPill label="AGI" value={part.agilityFactor} sel={isSelected} />
-                    <StatPill label="ROT" value={part.rotationRate} sel={isSelected} />
+                    <StatPill
+                      label="SPD"
+                      value={part.speedFactor}
+                      sel={isSelected}
+                    />
+                    <StatPill
+                      label="AGI"
+                      value={part.agilityFactor}
+                      sel={isSelected}
+                    />
+                    <StatPill
+                      label="ROT"
+                      value={part.rotationRate}
+                      sel={isSelected}
+                    />
                     <StatPill label="SCL" value={part.scale} sel={isSelected} />
                   </div>
                 </button>
@@ -172,9 +241,18 @@ export function DroneConstructor({
 // ── Flight Config Tab ─────────────────────────────────────────────────────────
 
 function FlightTab({
-  cfg, onChange, mods, hasTrajectory,
-}: { cfg: FreeFlightConfig; onChange: (c: FreeFlightConfig) => void; mods: DroneModifiers; hasTrajectory: boolean }) {
-  const update = (patch: Partial<FreeFlightConfig>) => onChange({ ...cfg, ...patch });
+  cfg,
+  onChange,
+  mods,
+  hasTrajectory,
+}: {
+  cfg: FreeFlightConfig;
+  onChange: (c: FreeFlightConfig) => void;
+  mods: DroneModifiers;
+  hasTrajectory: boolean;
+}) {
+  const update = (patch: Partial<FreeFlightConfig>) =>
+    onChange({ ...cfg, ...patch });
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -185,35 +263,44 @@ function FlightTab({
       )}
       {!hasTrajectory && (
         <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-[11px] text-emerald-300">
-          No .BIN file — free flight simulation active. Configure your flight below.
+          No .BIN file — free flight simulation active. Configure your flight
+          below.
         </div>
       )}
 
       <SliderField
         label="Distance"
         value={cfg.distance_m}
-        min={10} max={2000} step={10}
+        min={10}
+        max={2000}
+        step={10}
         unit="m"
         onChange={(v) => update({ distance_m: v })}
       />
       <SliderField
         label="Altitude"
         value={cfg.altitude_m}
-        min={5} max={500} step={5}
+        min={5}
+        max={500}
+        step={5}
         unit="m"
         onChange={(v) => update({ altitude_m: v })}
       />
       <SliderField
         label="Start X"
         value={cfg.startX}
-        min={-500} max={500} step={10}
+        min={-500}
+        max={500}
+        step={10}
         unit="m"
         onChange={(v) => update({ startX: v })}
       />
       <SliderField
         label="Start Y"
         value={cfg.startY}
-        min={-500} max={500} step={10}
+        min={-500}
+        max={500}
+        step={10}
         unit="m"
         onChange={(v) => update({ startY: v })}
       />
@@ -240,22 +327,32 @@ function FlightTab({
       </div>
 
       <div className="rounded-lg bg-white/3 border border-white/5 p-3 space-y-1.5 mt-4">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Computed Flight</div>
+        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+          Computed Flight
+        </div>
         <div className="flex justify-between text-[11px]">
           <span className="text-slate-500">Est. max speed</span>
-          <span className="text-emerald-400 font-bold tabular-nums">{mods.estMaxSpeed_mps} m/s</span>
+          <span className="text-emerald-400 font-bold tabular-nums">
+            {mods.estMaxSpeed_mps} m/s
+          </span>
         </div>
         <div className="flex justify-between text-[11px]">
           <span className="text-slate-500">Est. flight time</span>
-          <span className="text-cyan-400 font-bold tabular-nums">{mods.estFlightTime_min} min</span>
+          <span className="text-cyan-400 font-bold tabular-nums">
+            {mods.estFlightTime_min} min
+          </span>
         </div>
         <div className="flex justify-between text-[11px]">
           <span className="text-slate-500">Thrust/weight</span>
-          <span className="text-purple-400 font-bold tabular-nums">{mods.thrustToWeight}</span>
+          <span className="text-purple-400 font-bold tabular-nums">
+            {mods.thrustToWeight}
+          </span>
         </div>
         <div className="flex justify-between text-[11px]">
           <span className="text-slate-500">Rotation rate</span>
-          <span className="text-orange-400 font-bold tabular-nums">{mods.rotationMultiplier}x</span>
+          <span className="text-orange-400 font-bold tabular-nums">
+            {mods.rotationMultiplier}x
+          </span>
         </div>
       </div>
 
@@ -273,19 +370,39 @@ function FlightTab({
 
 // ── Reusable slider ───────────────────────────────────────────────────────────
 
-function SliderField({ label, value, min, max, step, unit, onChange }: {
-  label: string; value: number; min: number; max: number; step: number; unit: string;
+function SliderField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
   onChange: (v: number) => void;
 }) {
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
-        <span className="text-xs text-slate-200 font-bold tabular-nums">{value}{unit}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          {label}
+        </span>
+        <span className="text-xs text-slate-200 font-bold tabular-nums">
+          {value}
+          {unit}
+        </span>
       </div>
       <input
         type="range"
-        min={min} max={max} step={step}
+        min={min}
+        max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-1.5 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
@@ -296,15 +413,29 @@ function SliderField({ label, value, min, max, step, unit, onChange }: {
 
 // ── Stat pills ────────────────────────────────────────────────────────────────
 
-function StatPill({ label, value, sel }: { label: string; value: number; sel: boolean }) {
+function StatPill({
+  label,
+  value,
+  sel,
+}: {
+  label: string;
+  value: number;
+  sel: boolean;
+}) {
   const pct = Math.round((value - 1) * 100);
   const sign = pct >= 0 ? '+' : '';
-  const color = pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-rose-400' : 'text-slate-400';
+  const color =
+    pct > 0 ? 'text-emerald-400' : pct < 0 ? 'text-rose-400' : 'text-slate-400';
 
   return (
-    <div className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] ${sel ? 'bg-blue-500/10' : 'bg-white/3'}`}>
+    <div
+      className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] ${sel ? 'bg-blue-500/10' : 'bg-white/3'}`}
+    >
       <span className="text-slate-500 font-medium">{label}</span>
-      <span className={`font-bold tabular-nums ${color}`}>{sign}{pct}%</span>
+      <span className={`font-bold tabular-nums ${color}`}>
+        {sign}
+        {pct}%
+      </span>
     </div>
   );
 }
@@ -322,7 +453,11 @@ function StatsFooter({ mods }: { mods: DroneModifiers }) {
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         <FooterStat label="Weight" value={`${mods.totalWeight_g}g`} />
-        <FooterStat label="Speed" value={`${speedSign}${speedPct}%`} accent={speedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'} />
+        <FooterStat
+          label="Speed"
+          value={`${speedSign}${speedPct}%`}
+          accent={speedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        />
         <FooterStat label="Max Spd" value={`${mods.estMaxSpeed_mps} m/s`} />
       </div>
       <div className="grid grid-cols-3 gap-1.5">
@@ -334,11 +469,23 @@ function StatsFooter({ mods }: { mods: DroneModifiers }) {
   );
 }
 
-function FooterStat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function FooterStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
   return (
     <div className="rounded-lg bg-white/3 px-2 py-1.5 text-center">
       <div className="text-[9px] text-slate-500 uppercase">{label}</div>
-      <div className={`text-xs font-bold tabular-nums ${accent ?? 'text-slate-200'}`}>{value}</div>
+      <div
+        className={`text-xs font-bold tabular-nums ${accent ?? 'text-slate-200'}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
